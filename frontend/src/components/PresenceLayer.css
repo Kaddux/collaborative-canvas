@@ -1,0 +1,18 @@
+.presence-cursor {
+  pointer-events: none;
+  transition: transform 0.1s linear;
+}
+
+.presence-cursor-label {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Inter', system-ui, sans-serif;
+  fill: white;
+  pointer-events: none;
+}
+
+.presence-cursor-label-bg {
+  rx: 4;
+  ry: 4;
+  pointer-events: none;
+}

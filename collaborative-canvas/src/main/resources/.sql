@@ -1,0 +1,1 @@
+CREATE DATABASE collaborative_canvas;

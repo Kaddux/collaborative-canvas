@@ -1,0 +1,94 @@
+{
+  "info": {
+    "name": "Collaborative Canvas API",
+    "description": "REST and WebSocket requests for the collaborative canvas application.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "wsUrl", "value": "ws://localhost:8080" },
+    { "key": "canvasId", "value": "" },
+    { "key": "objectId", "value": "object-1" },
+    { "key": "clientId", "value": "postman-client" }
+  ],
+  "item": [
+    {
+      "name": "REST API",
+      "item": [
+        {
+          "name": "Create canvas",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman test canvas\"\n}"
+            },
+            "url": "{{baseUrl}}/api/canvases",
+            "description": "Creates a canvas and stores its ID in the canvasId collection variable."
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 201 Created', function () { pm.response.to.have.status(201); });",
+                "const body = pm.response.json();",
+                "pm.expect(body.canvasId).to.be.a('string').and.not.empty;",
+                "pm.collectionVariables.set('canvasId', body.canvasId);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get canvas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/canvases/{{canvasId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200 OK', function () { pm.response.to.have.status(200); });",
+                "pm.expect(pm.response.json().canvasId).to.eql(pm.collectionVariables.get('canvasId'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Get missing canvas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/canvases/does-not-exist"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('returns 404 Not Found', function () { pm.response.to.have.status(404); });"]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "WebSocket API",
+      "description": "Connect using the URL below, then send the messages documented in postman/README.md.",
+      "item": [
+        {
+          "name": "Connect to canvas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{wsUrl}}/ws/canvas/{{canvasId}}?clientId={{clientId}}",
+            "description": "Open this request as a WebSocket request in Postman."
+          }
+        }
+      ]
+    }
+  ]
+}
