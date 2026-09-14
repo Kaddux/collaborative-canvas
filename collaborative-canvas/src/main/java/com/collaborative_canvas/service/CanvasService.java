@@ -7,6 +7,7 @@ import com.collaborative_canvas.persistence.CanvasMetadataRepository;
 import com.collaborative_canvas.repository.CanvasRepository;
 import com.collaborative_canvas.websocket.CanvasObject;
 import com.collaborative_canvas.websocket.CanvasObjectType;
+import com.collaborative_canvas.websocket.CanvasOperation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -198,56 +199,51 @@ public class CanvasService {
     }
 
     @Transactional
-    public OperationResult updateObject(
-            String canvasId,
-            String objectId,
-            double width,
-            double height,
-            double rotation,
-            String color,
-            String strokeColor,
-            double strokeWidth,
-            String text) {
+    public OperationResult updateObject(String canvasId, CanvasOperation op) {
 
-        CanvasObject object = getObject(canvasId, objectId);
-        if (object == null) {
-            return new OperationResult(false, "Object does not exist");
+        if (op.getObjectId() == null || op.getObjectId().isBlank()) {
+            return new OperationResult(false, "objectId is required");
         }
 
-        if (width < 0 || height < 0) {
-            return new OperationResult(false, "Width and height cannot be negative");
+        Map<String, CanvasObject> room = canvasObjects.get(canvasId);
+        if (room == null || !room.containsKey(op.getObjectId())) {
+            return new OperationResult(false,"Object not found: " + op.getObjectId());
         }
-        if (strokeWidth < 0) {
-            return new OperationResult(false, "strokeWidth cannot be negative");
-        }
+
+        // server-side clamping
+        double width = Math.max(4, op.getWidth());
+        double height = Math.max(4, op.getHeight());
+        double strokeWidth = Math.max(0, op.getStrokeWidth());
+
+        CanvasObject object = room.get(op.getObjectId());
 
         synchronized (object) {
+            object.setType(op.getType());
+            object.setX(op.getX());
+            object.setY(op.getY());
             object.setWidth(width);
             object.setHeight(height);
-            object.setRotation(rotation);
-            object.setColor(color);
-            object.setStrokeColor(strokeColor);
+            object.setRotation(op.getRotation());
+            object.setColor(op.getColor());
+            object.setStrokeColor(op.getStrokeColor());
             object.setStrokeWidth(strokeWidth);
-            object.setText(text);
+            object.setText(op.getText());
         }
 
-        CanvasObjectEntity entity =
-                canvasRepository.findById(objectId)
-                        .orElse(null);
-
-        if (entity != null) {
+        canvasRepository.findById(op.getObjectId()).ifPresent(entity -> {
+            entity.setX(op.getX());
+            entity.setY(op.getY());
             entity.setWidth(width);
             entity.setHeight(height);
-            entity.setRotation(rotation);
-            entity.setColor(color);
-            entity.setStrokeColor(strokeColor);
+            entity.setRotation(op.getRotation());
+            entity.setColor(op.getColor());
+            entity.setStrokeColor(op.getStrokeColor());
             entity.setStrokeWidth(strokeWidth);
-            entity.setText(text);
-
+            entity.setText(op.getText());
             canvasRepository.save(entity);
-        }
+        });
 
-        return new OperationResult(true, null);
+        return new OperationResult(true,null);
     }
 
     public Collection<CanvasObject> loadObjects(String canvasId) {
@@ -333,6 +329,7 @@ public class CanvasService {
     public boolean canvasExists(String canvasId) {
         return canvasMetadataRepository.existsById(canvasId);
     }
+
 
     public record OperationResult(
             boolean success,

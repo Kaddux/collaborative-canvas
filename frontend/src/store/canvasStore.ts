@@ -19,6 +19,7 @@ interface CanvasState {
   // ── Canvas objects ──
   objects: Map<string, CanvasObject>;
   sequence: number;
+  pendingResize: { objectId: string; snapshot: CanvasObject } | null;
 
   // ── Local interaction ──
   activeTool: Tool;
@@ -48,8 +49,11 @@ interface CanvasState {
   optimisticDelete: (objectId: string) => void;
   optimisticUpdate: (
     objectId: string,
-    fields: Partial<Pick<CanvasObject, 'width' | 'height' | 'rotation' | 'color' | 'strokeColor' | 'strokeWidth' | 'text'>>
+    fields: Partial<Pick<CanvasObject, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'color' | 'strokeColor' | 'strokeWidth' | 'text'>>
   ) => void;
+  beginResize: (objectId: string) => void;
+  clearPendingResize: (objectId: string) => void;
+  rollbackResize: (objectId: string) => void;
 
   // Remote operations
   applyRemoteCreate: (op: {
@@ -69,6 +73,8 @@ interface CanvasState {
   applyRemoteDelete: (objectId: string, sequence: number) => void;
   applyRemoteUpdate: (op: {
     objectId: string;
+    x?: number;
+    y?: number;
     width?: number;
     height?: number;
     rotation?: number;
@@ -102,6 +108,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
 
   objects: new Map(),
   sequence: 0,
+  pendingResize: null,
 
   activeTool: 'SELECT',
   selectedObjectId: null,
@@ -207,6 +214,23 @@ export const useCanvasStore = create<CanvasState>((set) => ({
       return { objects };
     }),
 
+  beginResize: (objectId) =>
+    set((state) => {
+      const object = state.objects.get(objectId);
+      return object ? { pendingResize: { objectId, snapshot: { ...object } } } : {};
+    }),
+
+  clearPendingResize: (objectId) =>
+    set((state) => state.pendingResize?.objectId === objectId ? { pendingResize: null } : {}),
+
+  rollbackResize: (objectId) =>
+    set((state) => {
+      if (state.pendingResize?.objectId !== objectId) return {};
+      const objects = new Map(state.objects);
+      if (objects.has(objectId)) objects.set(objectId, state.pendingResize.snapshot);
+      return { objects, pendingResize: null };
+    }),
+
   // ── Remote operations ───────────────────────────────────────────────
   applyRemoteCreate: (op, sequence) =>
     set((state) => {
@@ -255,6 +279,8 @@ export const useCanvasStore = create<CanvasState>((set) => ({
       const obj = objects.get(op.objectId);
       if (obj) {
         const updated = { ...obj };
+        if (op.x !== undefined) updated.x = op.x;
+        if (op.y !== undefined) updated.y = op.y;
         if (op.width !== undefined) updated.width = op.width;
         if (op.height !== undefined) updated.height = op.height;
         if (op.rotation !== undefined) updated.rotation = op.rotation;
@@ -338,5 +364,6 @@ export const useCanvasStore = create<CanvasState>((set) => ({
       viewport: { offsetX: 0, offsetY: 0, zoom: 1 },
       peers: new Map(),
       remoteEditHighlights: new Map(),
+      pendingResize: null,
     }),
 }));

@@ -6,6 +6,7 @@ import com.collaborative_canvas.persistence.CanvasEntity;
 import com.collaborative_canvas.persistence.CanvasMetadataRepository;
 import com.collaborative_canvas.repository.CanvasRepository;
 import com.collaborative_canvas.websocket.CanvasObject;
+import com.collaborative_canvas.websocket.CanvasOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -146,9 +147,18 @@ class CanvasServiceTest {
         when(canvasRepository.findById("object-1"))
                 .thenReturn(Optional.of(existingEntity));
 
+        // object.setX(op.getX());
+        //            object.setY(op.getY());
+        //            object.setWidth(width);
+        //            object.setHeight(height);
+        //            object.setRotation(op.getRotation());
+        //            object.setColor(op.getColor());
+        //            object.setStrokeColor(op.getStrokeColor());
+        //            object.setStrokeWidth(strokeWidth);
+        //            object.setText(op.getText());
         CanvasService.OperationResult result = canvasService.updateObject(
-                "canvas-1", "object-1",
-                300, 150, 45, "#ff0000", "#00ff00", 4, "hello"
+                "canvas-1", updateOperation("object-1", 10, 20, 300,
+                        150, 45, "#ff0000", "#00ff00", 4, "hello")
         );
 
         assertTrue(result.success());
@@ -172,13 +182,80 @@ class CanvasServiceTest {
     }
 
     @Test
-    void updateNonexistentObjectFails() {
+    void resizeObjectUpdatesBoundsAndClampsDimensions() {
+        canvasService.createObject("canvas-1", "object-1", "RECTANGLE", 10, 20,
+                200, 100, 0, "#ffffff", "#000000", 2, null);
+        when(canvasRepository.findById("object-1"))
+                .thenReturn(Optional.of(new CanvasObjectEntity(
+                        "object-1", "canvas-1", "RECTANGLE", 10, 20,
+                        200, 100, 0, "#ffffff", "#000000", 2, null)));
+
         CanvasService.OperationResult result = canvasService.updateObject(
-                "canvas-1", "missing",
-                200, 100, 0, "#ffffff", "#000000", 2, null
+                "canvas-1", updateOperation("object-1", 75, 90, 0,
+                        0, 0, "#ffffff", "#000000", 2, null)
+        );
+
+        assertTrue(result.success());
+        CanvasObject object = canvasService.getObject("canvas-1", "object-1");
+        assertEquals(75, object.getX());
+        assertEquals(90, object.getY());
+        assertEquals(4, object.getWidth());
+        assertEquals(4, object.getHeight());
+        verify(canvasRepository).save(argThat(entity ->
+                entity.getX() == 75
+                        && entity.getY() == 90
+                        && entity.getWidth() == 4
+                        && entity.getHeight() == 4
+        ));
+    }
+
+    @Test
+    void resizeOfMissingObjectIsRejectedWithoutPersistence() {
+        CanvasService.OperationResult result = canvasService.updateObject(
+                "canvas-1", updateOperation("missing", 75, 90, 120,
+                        80, 0, "#ffffff", "#000000", 2, null)
         );
 
         assertFalse(result.success());
-        assertEquals("Object does not exist", result.error());
+        assertEquals("Object not found: missing", result.error());
+        verify(canvasRepository, never()).save(any(CanvasObjectEntity.class));
     }
+
+    @Test
+    void updateNonexistentObjectFails() {
+        CanvasService.OperationResult result = canvasService.updateObject(
+                                "canvas-1", updateOperation("missing", 0, 0, 200,
+                                        100, 0, "#ffffff", "#000000", 2, null)
+        );
+
+        assertFalse(result.success());
+                assertEquals("Object not found: missing", result.error());
+    }
+
+        private CanvasOperation updateOperation(
+                        String objectId,
+                        double x,
+                        double y,
+                        double width,
+                            double height,
+                            double rotation,
+                        String color,
+                        String strokeColor,
+                        double strokeWidth,
+                        String text
+        ) {
+                CanvasOperation operation = new CanvasOperation();
+                operation.setObjectId(objectId);
+                operation.setType("RECTANGLE");
+                operation.setX(x);
+                operation.setY(y);
+                operation.setWidth(width);
+                operation.setHeight(height);
+                operation.setRotation(rotation);
+                operation.setColor(color);
+                operation.setStrokeColor(strokeColor);
+                operation.setStrokeWidth(strokeWidth);
+                operation.setText(text);
+                return operation;
+        }
 }

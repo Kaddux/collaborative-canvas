@@ -220,14 +220,13 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
 
         switch (operation.getType()) {
             case "CREATE_OBJECT" -> {
-
                 CanvasService.OperationResult result = canvasService.createObject(
-                                canvasId,
-                                operation.getObjectId(),
+                        canvasId,
+                        operation.getObjectId(),
                         operation.getObjectType() == null
-                            ? "RECTANGLE"
-                            : operation.getObjectType(),
-                                operation.getX(),
+                                ? "RECTANGLE"
+                                : operation.getObjectType(),
+                        operation.getX(),
                         operation.getY(),
                         operation.getWidth(),
                         operation.getHeight(),
@@ -236,55 +235,39 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                         operation.getStrokeColor(),
                         operation.getStrokeWidth(),
                         operation.getText()
-                        );
-
+                );
                 return new OperationResult(result.success(), result.error());
             }
-
             case "MOVE_OBJECT" -> {
-
                 CanvasService.OperationResult result = canvasService.moveObject(
-                                canvasId,
-                                operation.getObjectId(),
-                                operation.getX(),
-                                operation.getY()
-                        );
-
-                return new OperationResult(result.success(), result.error());
-            }
-
-            case "DELETE_OBJECT" -> {
-
-                CanvasService.OperationResult result = canvasService.deleteObject(
-                                canvasId,
-                                operation.getObjectId()
-                        );
-
-                return new OperationResult(result.success(), result.error());
-            }
-
-            case "UPDATE_OBJECT" -> {
-
-                CanvasService.OperationResult result = canvasService.updateObject(
                         canvasId,
                         operation.getObjectId(),
-                        operation.getWidth(),
-                        operation.getHeight(),
-                        operation.getRotation(),
-                        operation.getColor(),
-                        operation.getStrokeColor(),
-                        operation.getStrokeWidth(),
-                        operation.getText()
+                        operation.getX(),
+                        operation.getY()
                 );
-
                 return new OperationResult(result.success(), result.error());
             }
-
+            case "DELETE_OBJECT" -> {
+                CanvasService.OperationResult result = canvasService.deleteObject(
+                        canvasId,
+                        operation.getObjectId()
+                );
+                return new OperationResult(result.success(), result.error());
+            }
+            case "UPDATE_OBJECT" -> {
+                CanvasService.OperationResult result = canvasService.updateObject(
+                        canvasId,
+                        operation
+                );
+                return new OperationResult(result.success(), result.error());
+            }
             default -> {
                 return new OperationResult(false, "Unknown operation: " + operation.getType());
             }
         }
     }
+
+
     private void broadcastOperation(
             String canvasId,
             CanvasOperation operation,
@@ -309,8 +292,7 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 objectMapper.writeValueAsString(message);
 
         for (WebSocketSession client : clients) {
-            if (client.isOpen() &&
-                    !client.getId().equals(sender.getId())) {
+            if (client.isOpen()) {
 
                 client.sendMessage(
                         new TextMessage(json)

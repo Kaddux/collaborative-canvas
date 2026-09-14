@@ -61,8 +61,17 @@
   fill: #fff;
   stroke: var(--accent);
   stroke-width: 1.5;
-  cursor: nwse-resize;
   transition: transform 0.1s;
+}
+
+.resize-handle-nw,
+.resize-handle-se {
+  cursor: nwse-resize;
+}
+
+.resize-handle-ne,
+.resize-handle-sw {
+  cursor: nesw-resize;
 }
 
 .resize-handle:hover {

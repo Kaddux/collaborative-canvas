@@ -17,6 +17,7 @@ import './CanvasSurface.css';
 interface Props {
   onCreateObject: (obj: CanvasObject) => void;
   onMoveObject: (objectId: string, x: number, y: number) => void;
+  onResizeObject: (objectId: string, x: number, y: number, width: number, height: number) => void;
   onPresenceUpdate: (cursor: Point) => void;
 }
 
@@ -34,11 +35,25 @@ interface DragState {
   objectStartY: number;
 }
 
+type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
+
+interface ResizeState {
+  objectId: string;
+  handle: ResizeHandle;
+  startCanvas: Point;
+  objectStartX: number;
+  objectStartY: number;
+  objectStartWidth: number;
+  objectStartHeight: number;
+}
+
 const GRID_SIZE = 20;
+const MIN_OBJECT_SIZE = 20;
 
 export default function CanvasSurface({
   onCreateObject,
   onMoveObject,
+  onResizeObject,
   onPresenceUpdate,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -49,12 +64,15 @@ export default function CanvasSurface({
   const viewport = useCanvasStore((s) => s.viewport);
   const setSelectedObjectId = useCanvasStore((s) => s.setSelectedObjectId);
   const optimisticMove = useCanvasStore((s) => s.optimisticMove);
+  const optimisticUpdate = useCanvasStore((s) => s.optimisticUpdate);
+  const beginResize = useCanvasStore((s) => s.beginResize);
   const panViewport = useCanvasStore((s) => s.panViewport);
   const zoomViewport = useCanvasStore((s) => s.zoomViewport);
   const remoteEditHighlights = useCanvasStore((s) => s.remoteEditHighlights);
 
   const [drawState, setDrawState] = useState<DrawState | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [resizeState, setResizeState] = useState<ResizeState | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
@@ -156,6 +174,33 @@ export default function CanvasSurface({
         return;
       }
 
+      if (resizeState) {
+        const canvasPoint = screenToCanvas(e.clientX, e.clientY, viewport);
+        const right = resizeState.objectStartX + resizeState.objectStartWidth;
+        const bottom = resizeState.objectStartY + resizeState.objectStartHeight;
+        let x = resizeState.objectStartX;
+        let y = resizeState.objectStartY;
+        let width = resizeState.objectStartWidth;
+        let height = resizeState.objectStartHeight;
+
+        if (resizeState.handle.includes('e')) {
+          width = Math.max(MIN_OBJECT_SIZE, canvasPoint.x - x);
+        } else {
+          x = Math.min(canvasPoint.x, right - MIN_OBJECT_SIZE);
+          width = right - x;
+        }
+
+        if (resizeState.handle.includes('s')) {
+          height = Math.max(MIN_OBJECT_SIZE, canvasPoint.y - y);
+        } else {
+          y = Math.min(canvasPoint.y, bottom - MIN_OBJECT_SIZE);
+          height = bottom - y;
+        }
+
+        optimisticUpdate(resizeState.objectId, { x, y, width, height });
+        return;
+      }
+
       if (dragState) {
         const canvasPoint = screenToCanvas(e.clientX, e.clientY, viewport);
         const dx = canvasPoint.x - dragState.startCanvas.x;
@@ -166,7 +211,7 @@ export default function CanvasSurface({
         return;
       }
     },
-    [isPanning, panStart, drawState, dragState, viewport, panViewport, optimisticMove, sendPresence],
+    [isPanning, panStart, drawState, resizeState, dragState, viewport, panViewport, optimisticUpdate, optimisticMove, sendPresence],
   );
 
   // ── Mouse up ──
@@ -223,6 +268,15 @@ export default function CanvasSurface({
         return;
       }
 
+      if (resizeState) {
+        const obj = objects.get(resizeState.objectId);
+        if (obj) {
+          onResizeObject(resizeState.objectId, obj.x, obj.y, obj.width, obj.height);
+        }
+        setResizeState(null);
+        return;
+      }
+
       if (dragState) {
         const obj = objects.get(dragState.objectId);
         if (obj) {
@@ -232,7 +286,7 @@ export default function CanvasSurface({
         return;
       }
     },
-    [isPanning, drawState, dragState, objects, onCreateObject, onMoveObject],
+    [isPanning, drawState, resizeState, dragState, objects, onCreateObject, onResizeObject, onMoveObject],
   );
 
   // ── Mouse wheel (zoom) ──
@@ -274,12 +328,36 @@ export default function CanvasSurface({
       if (!obj) return;
 
       setSelectedObjectId(objectId);
+      beginResize(objectId);
       const canvasPoint = screenToCanvas(e.clientX, e.clientY, viewport);
       setDragState({
         objectId,
         startCanvas: canvasPoint,
         objectStartX: obj.x,
         objectStartY: obj.y,
+      });
+    },
+    [activeTool, objects, viewport, beginResize, setSelectedObjectId],
+  );
+
+  const handleResizeMouseDown = useCallback(
+    (objectId: string, handle: ResizeHandle, e: ReactMouseEvent) => {
+      if (activeTool !== 'SELECT' || e.button !== 0) return;
+      e.stopPropagation();
+
+      const obj = objects.get(objectId);
+      if (!obj) return;
+
+      setSelectedObjectId(objectId);
+      const canvasPoint = screenToCanvas(e.clientX, e.clientY, viewport);
+      setResizeState({
+        objectId,
+        handle,
+        startCanvas: canvasPoint,
+        objectStartX: obj.x,
+        objectStartY: obj.y,
+        objectStartWidth: obj.width,
+        objectStartHeight: obj.height,
       });
     },
     [activeTool, objects, viewport, setSelectedObjectId],
@@ -528,7 +606,7 @@ export default function CanvasSurface({
           {ghostObj && renderShape(ghostObj, true)}
 
           {/* Selection outline + handles */}
-          {selectedObj && !dragState && (
+          {selectedObj && !dragState && !resizeState && (
             <g>
               <rect
                 className="selection-outline"
@@ -547,7 +625,12 @@ export default function CanvasSurface({
               ].map(([hx, hy], i) => (
                 <rect
                   key={i}
-                  className="resize-handle"
+                  className={`resize-handle resize-handle-${(['nw', 'ne', 'sw', 'se'] as ResizeHandle[])[i]}`}
+                  onMouseDown={(e) => handleResizeMouseDown(
+                    selectedObj.objectId,
+                    (['nw', 'ne', 'sw', 'se'] as ResizeHandle[])[i],
+                    e,
+                  )}
                   x={hx}
                   y={hy}
                   width={8}

@@ -83,6 +83,8 @@ export default function App() {
                   s.applyRemoteUpdate(
                     {
                       objectId: op.objectId,
+                      x: op.x,
+                      y: op.y,
                       width: op.width,
                       height: op.height,
                       rotation: op.rotation,
@@ -94,6 +96,9 @@ export default function App() {
                     op.sequence,
                   );
                   break;
+              }
+              if (op.type === 'UPDATE_OBJECT' && msg.clientId === store.getState().clientId) {
+                s.clearPendingResize(op.objectId);
               }
               break;
             }
@@ -111,6 +116,7 @@ export default function App() {
               break;
 
             case 'ERROR':
+              if (s.pendingResize) s.rollbackResize(s.pendingResize.objectId);
               s.handleError(typeof msg.payload === 'string' ? msg.payload : 'Unknown error');
               break;
           }
@@ -167,6 +173,17 @@ export default function App() {
     });
   }, []);
 
+  const handleResizeObject = useCallback((objectId: string, x: number, y: number, width: number, height: number) => {
+    wsRef.current?.send({
+      type: 'UPDATE_OBJECT',
+      objectId,
+      x,
+      y,
+      width,
+      height,
+    });
+  }, []);
+
   const handleDeleteObject = useCallback((objectId: string) => {
     store.getState().optimisticDelete(objectId);
     wsRef.current?.send({
@@ -204,6 +221,7 @@ export default function App() {
       <CanvasSurface
         onCreateObject={handleCreateObject}
         onMoveObject={handleMoveObject}
+        onResizeObject={handleResizeObject}
         onPresenceUpdate={handlePresenceUpdate}
       />
       <Toolbar onDelete={handleDelete} />
