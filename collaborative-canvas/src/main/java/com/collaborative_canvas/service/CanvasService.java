@@ -327,7 +327,7 @@ public class CanvasService {
                 object.setStrokeWidth(entity.getStrokeWidth());
                 object.setText(entity.getText());
                 object.setTextColor(entity.getTextColor());
-                object.setFontSize(entity.getFontSize());
+                object.setFontSize(entity.getFontSize() == null ? 0 : entity.getFontSize());
 
                 objects.put(
                         entity.getObjectId(),

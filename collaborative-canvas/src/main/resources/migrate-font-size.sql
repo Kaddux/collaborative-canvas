@@ -1,5 +1,5 @@
--- Backfill font_size for objects created before the column existed.
--- ddl-auto=update adds the column defaulting to 0; the render layer falls back per type
--- when 0, but backfill so persisted values are explicit.
-UPDATE canvas_objects SET font_size = 14 WHERE font_size = 0 AND type = 'STICKY_NOTE';
-UPDATE canvas_objects SET font_size = 16 WHERE font_size = 0;
+-- Add the font_size column if an existing database predates it (Hibernate ddl-auto may
+-- skip adding a NOT NULL column to a populated table), then backfill sensible defaults.
+ALTER TABLE canvas_objects ADD COLUMN IF NOT EXISTS font_size double precision;
+UPDATE canvas_objects SET font_size = 14 WHERE font_size IS NULL AND type = 'STICKY_NOTE';
+UPDATE canvas_objects SET font_size = 16 WHERE font_size IS NULL;
