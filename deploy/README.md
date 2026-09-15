@@ -22,22 +22,22 @@ are **not** published to the host.
 - A domain from the GitHub Student Pack (Name.com), e.g. `syncboard.me`.
 - `docker-compose.prod.yml`, the Dockerfiles and nginx config from this repo.
 
-## 1. Provision the VM (Standard_B2als_v2, 4 GB)
+## 1. Provision the VM (Standard_B2als_v2, 4 GB, Central India)
 
 ```bash
 az login
-az group create --name collaborative-canvas-rg --location eastus
+az group create --name syncboard-prod_group --location centralindia
 
 az vm create \
-  --resource-group collaborative-canvas-rg \
-  --name canvas-vm \
-  --image Ubuntu2204 \
+  --resource-group syncboard-prod_group \
+  --name syncboard-prod \
+  --image Ubuntu2404 \
   --size Standard_B2als_v2 \
-  --admin-username azureuser \
+  --admin-username Kaddu \
   --public-ip-sku Standard \
   --generate-ssh-keys
 
-az vm show -d -g collaborative-canvas-rg -n canvas-vm --query publicIps -o tsv
+az vm show -d -g syncboard-prod_group -n syncboard-prod --query publicIps -o tsv
 ```
 
 > The B-series `…t_v2` sizes (e.g. `Standard_B2ats_v2`) are 1 GB — too small for Kafka +
@@ -46,14 +46,18 @@ az vm show -d -g collaborative-canvas-rg -n canvas-vm --query publicIps -o tsv
 
 ### Network security group — only 22/80/443
 
+The portal auto-created `syncboard-prod-nsg` from the inbound-port selection. Confirm
+the rules and restrict SSH in **VM → Networking → Inbound port rules** (set the SSH
+rule's Source to your IP). CLI equivalent:
+
 ```bash
-NSG=canvas-vmNSG
-RG=collaborative-canvas-rg
+NSG=syncboard-prod-nsg
+RG=syncboard-prod_group
 
 az network nsg rule create -g $RG --nsg-name $NSG -n allow-http  --priority 300 --destination-port-ranges 80  --protocol Tcp --access Allow
 az network nsg rule create -g $RG --nsg-name $NSG -n allow-https --priority 301 --destination-port-ranges 443 --protocol Tcp --access Allow
 
-# Restrict SSH to your own IP (recommended).
+# Restrict SSH to your own IP (the portal-created rule is usually named default-allow-ssh).
 az network nsg rule update -g $RG --nsg-name $NSG -n default-allow-ssh --source-address-prefixes <YOUR_PUBLIC_IP>/32
 ```
 
@@ -62,7 +66,8 @@ Do **not** open 5432 or 9092.
 ## 2. Install Docker on the VM
 
 ```bash
-ssh azureuser@<VM_PUBLIC_IP>
+# macOS/Linux: chmod 400 syncboard-prod-key.pem first
+ssh -i syncboard-prod-key.pem Kaddu@<VM_PUBLIC_IP>
 
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl
@@ -175,7 +180,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 - The VM (`Standard_B2als_v2`) is ~$18/month; the $100 student credit covers roughly
   5+ months of 24/7 runtime (longer if you deallocate when idle).
 - Deallocate to stop compute billing (the static public IP and disk remain):
-  `az vm deallocate -g collaborative-canvas-rg -n canvas-vm` (restart with `az vm start …`).
+  `az vm deallocate -g syncboard-prod_group -n syncboard-prod` (restart with `az vm start …`).
 - Set a Cost Management budget alert (e.g. $80) so you are warned before the credit runs out.
 
 ## Notes / limitations
