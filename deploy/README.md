@@ -3,7 +3,7 @@
 Lift-and-shift of the existing stack (Postgres + Kafka in containers, Spring Boot
 backend, React frontend served by nginx) onto one Ubuntu VM with a domain and TLS.
 
-Account-level steps (Azure VM, Name.com domain) are performed by you. No secrets
+Account-level steps (Azure VM, Namecheap domain) are performed by you. No secrets
 are committed: all runtime secrets live in `.env`, which is gitignored.
 
 ## Architecture
@@ -19,7 +19,7 @@ are **not** published to the host.
 ## Prerequisites
 
 - Azure for Students subscription (`az login` works).
-- A domain from the GitHub Student Pack (Name.com), e.g. `syncboard.me`.
+- A domain from the GitHub Student Pack (Namecheap), e.g. `syncboard.me`.
 - `docker-compose.prod.yml`, the Dockerfiles and nginx config from this repo.
 
 ## 1. Provision the VM (Standard_B2als_v2, 4 GB, Central India)
@@ -116,8 +116,21 @@ bind :443 before Let's Encrypt has issued the real one.
 
 ## 6. DNS
 
-At Name.com, create an `A` record for your domain pointing at `<VM_PUBLIC_IP>`
-(optionally a `www` CNAME). Wait for propagation: `dig +short syncboard.me`.
+The domain is managed at **Namecheap**. In **Domain List → syncboard.me → Manage →
+Advanced DNS** (nameservers = Namecheap BasicDNS), add:
+
+- `A Record`, Host `@`, Value `<VM_PUBLIC_IP>` (the static IP)
+- optional `A Record`, Host `www`, same value
+
+Remove any pre-existing apex `A` records that point elsewhere (e.g. GitHub Pages'
+`185.199.108.153` / `.109.153` / `.110.153` / `.111.153`). Otherwise requests
+round-robin between the VM and GitHub Pages, and the Let's Encrypt HTTP-01
+challenge can hit the wrong host.
+
+Wait for propagation:
+```bash
+dig +short syncboard.me    # must print only <VM_PUBLIC_IP>
+```
 
 ## 7. TLS via Let's Encrypt
 
