@@ -20,6 +20,7 @@ public class CanvasOperation {
     private double strokeWidth;
     private String text;
     private String textColor;
+    private double fontSize;
     private String operationId;
     private long sequence;
 

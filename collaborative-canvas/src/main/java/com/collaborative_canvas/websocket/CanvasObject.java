@@ -20,6 +20,7 @@ public class CanvasObject {
     private double strokeWidth;
     private String text;
     private String textColor;
+    private double fontSize;
 
     /** Defensive snapshot used to capture before/after states for undo/redo history. */
     public CanvasObject copy() {
@@ -36,6 +37,7 @@ public class CanvasObject {
         copy.strokeWidth = strokeWidth;
         copy.text = text;
         copy.textColor = textColor;
+        copy.fontSize = fontSize;
         return copy;
     }
 }

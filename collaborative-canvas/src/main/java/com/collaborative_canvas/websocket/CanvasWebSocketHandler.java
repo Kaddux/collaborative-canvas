@@ -332,7 +332,8 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                         operation.getStrokeColor(),
                         operation.getStrokeWidth(),
                         operation.getText(),
-                        operation.getTextColor()
+                        operation.getTextColor(),
+                        operation.getFontSize()
                 );
             }
             case "MOVE_OBJECT" -> {

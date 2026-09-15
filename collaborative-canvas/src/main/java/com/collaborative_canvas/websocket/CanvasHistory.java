@@ -156,5 +156,6 @@ public class CanvasHistory {
         operation.setStrokeWidth(object.getStrokeWidth());
         operation.setText(object.getText());
         operation.setTextColor(object.getTextColor());
+        operation.setFontSize(object.getFontSize());
     }
 }

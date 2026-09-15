@@ -22,6 +22,7 @@ export interface CanvasObject {
   strokeWidth: number;
   text: string | null;
   textColor: string | null;
+  fontSize: number;
 }
 
 // ── Tool union ──────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ export interface OutboundOperation {
   strokeWidth?: number;
   text?: string | null;
   textColor?: string | null;
+  fontSize?: number;
 }
 
 export interface OutboundPresence {
@@ -102,6 +104,7 @@ export interface InboundOperation {
     strokeWidth?: number;
     text?: string | null;
     textColor?: string | null;
+    fontSize?: number;
   };
 }
 

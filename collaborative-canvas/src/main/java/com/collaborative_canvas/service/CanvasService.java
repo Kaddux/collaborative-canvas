@@ -38,7 +38,7 @@ public class CanvasService {
             double y) {
 
                 return createObject(canvasId, objectId, "RECTANGLE", x, y,
-                                200, 100, 0, "#ffffff", "#1E1E1E", 2, null, null);
+                                200, 100, 0, "#ffffff", "#1E1E1E", 2, null, null, 16);
         }
 
         @Transactional
@@ -57,7 +57,7 @@ public class CanvasService {
                         String text) {
 
                 return createObject(canvasId, objectId, type, x, y, width, height,
-                        rotation, color, strokeColor, strokeWidth, text, null);
+                        rotation, color, strokeColor, strokeWidth, text, null, 16);
         }
 
         @Transactional
@@ -74,7 +74,8 @@ public class CanvasService {
                         String strokeColor,
                         double strokeWidth,
                         String text,
-                        String textColor) {
+                        String textColor,
+                        double fontSize) {
 
                 if (objectId == null || objectId.isBlank()) {
                         return OperationResult.failure("Object ID is required");
@@ -114,6 +115,7 @@ public class CanvasService {
         object.setStrokeWidth(strokeWidth);
         object.setText(text);
         object.setTextColor(textColor);
+        object.setFontSize(fontSize);
 
         CanvasObject existing =
                 objects.putIfAbsent(objectId, object);
@@ -137,7 +139,8 @@ public class CanvasService {
                             strokeColor,
                             strokeWidth,
                             text,
-                            textColor
+                            textColor,
+                            fontSize
                     )
             );
         } catch (RuntimeException exception) {
@@ -270,6 +273,7 @@ public class CanvasService {
                 object.setStrokeWidth(strokeWidth);
                 object.setText(op.getText());
                 object.setTextColor(op.getTextColor());
+                object.setFontSize(op.getFontSize());
             }
 
             canvasRepository.findById(op.getObjectId()).ifPresent(entity -> {
@@ -283,6 +287,7 @@ public class CanvasService {
                 entity.setStrokeWidth(strokeWidth);
                 entity.setText(op.getText());
                 entity.setTextColor(op.getTextColor());
+                entity.setFontSize(op.getFontSize());
                 canvasRepository.save(entity);
             });
         } catch (RuntimeException exception) {
@@ -322,6 +327,7 @@ public class CanvasService {
                 object.setStrokeWidth(entity.getStrokeWidth());
                 object.setText(entity.getText());
                 object.setTextColor(entity.getTextColor());
+                object.setFontSize(entity.getFontSize());
 
                 objects.put(
                         entity.getObjectId(),
@@ -392,6 +398,7 @@ public class CanvasService {
             target.setStrokeWidth(source.getStrokeWidth());
             target.setText(source.getText());
             target.setTextColor(source.getTextColor());
+            target.setFontSize(source.getFontSize());
         }
     }
 

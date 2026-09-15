@@ -110,6 +110,7 @@ export default function App() {
                       strokeWidth: op.strokeWidth,
                       text: op.text,
                       textColor: op.textColor,
+                      fontSize: op.fontSize,
                     },
                     op.sequence,
                   );
@@ -134,6 +135,7 @@ export default function App() {
                       strokeWidth: op.strokeWidth,
                       text: op.text,
                       textColor: op.textColor,
+                      fontSize: op.fontSize,
                     },
                     op.sequence,
                   );
@@ -212,6 +214,7 @@ export default function App() {
       strokeWidth: obj.strokeWidth,
       text: obj.text,
       textColor: obj.textColor,
+      fontSize: obj.fontSize,
     });
   }, [store]);
 
@@ -243,6 +246,7 @@ export default function App() {
       strokeWidth: obj.strokeWidth,
       text: obj.text,
       textColor: obj.textColor,
+      fontSize: obj.fontSize,
     });
   }, [store]);
 
@@ -265,6 +269,7 @@ export default function App() {
       strokeWidth: obj.strokeWidth,
       text: obj.text,
       textColor: obj.textColor,
+      fontSize: obj.fontSize,
     });
   }, [store]);
 
@@ -318,6 +323,7 @@ export default function App() {
       strokeWidth: merged.strokeWidth,
       text: merged.text,
       textColor: merged.textColor,
+      fontSize: merged.fontSize,
     });
     },
     [store],
@@ -346,6 +352,7 @@ export default function App() {
       strokeWidth: merged.strokeWidth,
       text: merged.text,
       textColor: merged.textColor,
+      fontSize: merged.fontSize,
     });
     },
     [store],

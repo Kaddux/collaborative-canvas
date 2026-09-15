@@ -43,6 +43,8 @@ public class CanvasObjectEntity {
 
     private String textColor;
 
+    private double fontSize;
+
     protected CanvasObjectEntity() {
     }
 
@@ -53,7 +55,7 @@ public class CanvasObjectEntity {
             double y) {
 
         this(objectId, canvasId, "RECTANGLE", x, y, 200, 100, 0,
-                "#ffffff", "#1E1E1E", 2, null, null);
+                "#ffffff", "#1E1E1E", 2, null, null, 16);
     }
 
     public CanvasObjectEntity(
@@ -71,7 +73,7 @@ public class CanvasObjectEntity {
             String text) {
 
         this(objectId, canvasId, type, x, y, width, height, rotation,
-                color, strokeColor, strokeWidth, text, null);
+                color, strokeColor, strokeWidth, text, null, 16);
     }
 
     public CanvasObjectEntity(
@@ -89,6 +91,26 @@ public class CanvasObjectEntity {
             String text,
             String textColor) {
 
+        this(objectId, canvasId, type, x, y, width, height, rotation,
+                color, strokeColor, strokeWidth, text, textColor, 16);
+    }
+
+    public CanvasObjectEntity(
+            String objectId,
+            String canvasId,
+            String type,
+            double x,
+            double y,
+            double width,
+            double height,
+            double rotation,
+            String color,
+            String strokeColor,
+            double strokeWidth,
+            String text,
+            String textColor,
+            double fontSize) {
+
         this.objectId = objectId;
         this.canvasId = canvasId;
         this.type = type;
@@ -102,5 +124,6 @@ public class CanvasObjectEntity {
         this.strokeWidth = strokeWidth;
         this.text = text;
         this.textColor = textColor;
+        this.fontSize = fontSize;
     }
 }

@@ -54,7 +54,7 @@ interface CanvasState {
   optimisticDelete: (objectId: string) => void;
   optimisticUpdate: (
     objectId: string,
-    fields: Partial<Pick<CanvasObject, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'color' | 'strokeColor' | 'strokeWidth' | 'text' | 'textColor'>>
+    fields: Partial<Pick<CanvasObject, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'color' | 'strokeColor' | 'strokeWidth' | 'text' | 'textColor' | 'fontSize'>>
   ) => void;
   beginResize: (objectId: string) => void;
   clearPendingResize: (objectId: string) => void;
@@ -74,6 +74,7 @@ interface CanvasState {
     strokeWidth?: number;
     text?: string | null;
     textColor?: string | null;
+    fontSize?: number;
   }, sequence: number) => void;
   applyRemoteMove: (objectId: string, x: number, y: number, sequence: number) => void;
   applyRemoteDelete: (objectId: string, sequence: number) => void;
@@ -89,6 +90,7 @@ interface CanvasState {
     strokeWidth?: number;
     text?: string | null;
     textColor?: string | null;
+    fontSize?: number;
   }, sequence: number) => void;
 
   // Peers
@@ -260,6 +262,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
         strokeWidth: op.strokeWidth ?? 2,
         text: op.text ?? null,
         textColor: op.textColor ?? null,
+        fontSize: op.fontSize ?? (op.objectType === 'STICKY_NOTE' ? 14 : 16),
       };
       objects.set(op.objectId, newObj);
       return { objects, sequence };
@@ -302,6 +305,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
         if (op.strokeWidth !== undefined) updated.strokeWidth = op.strokeWidth;
         if (op.text !== undefined) updated.text = op.text;
         if (op.textColor !== undefined) updated.textColor = op.textColor;
+        if (op.fontSize !== undefined) updated.fontSize = op.fontSize;
         objects.set(op.objectId, updated);
       }
       return { objects, sequence };

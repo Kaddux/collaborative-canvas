@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { useCanvasStore } from '../store/canvasStore';
 import { screenToCanvas } from '../utils/transform';
-import { angleBetween, normalizeDeg } from '../utils/geometry';
+import { angleBetween, defaultFontSize, effectiveFontSize, normalizeDeg, scaleFontSize } from '../utils/geometry';
 import { generateObjectId } from '../utils/idgen';
 import { hashClientIdToColor } from '../utils/colors';
 import type { CanvasObject, CanvasObjectType, Point } from '../types/canvas';
@@ -42,12 +42,14 @@ type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
 
 interface ResizeState {
   objectId: string;
+  objectType: CanvasObjectType;
   handle: ResizeHandle;
   startCanvas: Point;
   objectStartX: number;
   objectStartY: number;
   objectStartWidth: number;
   objectStartHeight: number;
+  objectStartFontSize: number;
 }
 
 interface RotateState {
@@ -240,7 +242,16 @@ export default function CanvasSurface({
           height = bottom - y;
         }
 
-        optimisticUpdate(resizeState.objectId, { x, y, width, height });
+        let fontSize = resizeState.objectStartFontSize;
+        if (resizeState.objectType === 'TEXT' || resizeState.objectType === 'STICKY_NOTE') {
+          const base = resizeState.objectStartFontSize || defaultFontSize(resizeState.objectType);
+          const ratio = resizeState.objectStartHeight > 0
+            ? height / resizeState.objectStartHeight
+            : 1;
+          fontSize = scaleFontSize(base, ratio);
+        }
+
+        optimisticUpdate(resizeState.objectId, { x, y, width, height, fontSize });
         return;
       }
 
@@ -299,6 +310,7 @@ export default function CanvasSurface({
             strokeWidth: 2,
             text: null,
             textColor: null,
+            fontSize: 16,
           });
           setDrawState(null);
           return;
@@ -315,6 +327,7 @@ export default function CanvasSurface({
             strokeColor: '#f08c00',
             strokeWidth: 1,
             textColor: '#1e1e1e',
+            fontSize: 14,
             width: Math.max(width, 150),
             height: Math.max(height, 100),
           },
@@ -323,6 +336,7 @@ export default function CanvasSurface({
             strokeColor: 'transparent',
             strokeWidth: 0,
             textColor: '#1e1e1e',
+            fontSize: 16,
             width: Math.max(width, 120),
             height: Math.max(height, 30),
           },
@@ -343,6 +357,7 @@ export default function CanvasSurface({
           strokeWidth: typeDefaults.strokeWidth ?? 2,
           text: null,
           textColor: typeDefaults.textColor ?? null,
+          fontSize: typeDefaults.fontSize ?? defaultFontSize(objectType),
         };
 
         onCreateObject(newObj);
@@ -434,12 +449,14 @@ export default function CanvasSurface({
       const canvasPoint = screenToCanvas(e.clientX, e.clientY, viewport);
       setResizeState({
         objectId,
+        objectType: obj.type,
         handle,
         startCanvas: canvasPoint,
         objectStartX: obj.x,
         objectStartY: obj.y,
         objectStartWidth: obj.width,
         objectStartHeight: obj.height,
+        objectStartFontSize: obj.fontSize,
       });
     },
     [activeTool, objects, viewport, setSelectedObjectId],
@@ -511,7 +528,8 @@ export default function CanvasSurface({
 
   // ── Render shape ──
   const renderShape = (obj: CanvasObject, isGhost = false) => {
-    const { objectId, type, x, y, width, height, rotation, color, strokeColor, strokeWidth, text, textColor } = obj;
+    const { objectId, type, x, y, width, height, rotation, color, strokeColor, strokeWidth, text, textColor, fontSize } = obj;
+    const fs = effectiveFontSize(fontSize, type);
     const isSelected = objectId === selectedObjectId && !isGhost;
     const isEditing = objectId === editingTextId;
     const className = isGhost ? 'drawing-ghost' : `canvas-object ${isSelected ? 'selected' : ''}`;
@@ -543,13 +561,13 @@ export default function CanvasSurface({
             {text && type === 'STICKY_NOTE' && (
               <text
                 className="sticky-note-text"
-                x={x + 10}
-                y={y + 24}
+                x={x + fs * 0.71}
+                y={y + fs * 1.71}
                 fill={textColor ?? '#1e1e1e'}
-                style={{ fontSize: 14 }}
+                style={{ fontSize: fs }}
               >
                 {text.split('\n').map((line, i) => (
-                  <tspan key={i} x={x + 10} dy={i === 0 ? 0 : 18}>
+                  <tspan key={i} x={x + fs * 0.71} dy={i === 0 ? 0 : fs * 1.29}>
                     {line}
                   </tspan>
                 ))}
@@ -641,10 +659,10 @@ export default function CanvasSurface({
             {!isEditing &&
               (text ? (
                 <text
-                  x={x + 4}
-                  y={y + 20}
+                  x={x + fs * 0.25}
+                  y={y + fs * 1.25}
                   fill={textColor ?? '#1e1e1e'}
-                  style={{ fontSize: 16, fontFamily: 'Inter, system-ui, sans-serif' }}
+                  style={{ fontSize: fs, fontFamily: 'Inter, system-ui, sans-serif' }}
                 >
                   {text}
                 </text>
@@ -652,9 +670,9 @@ export default function CanvasSurface({
                 !isGhost && (
                   <text
                     className="text-placeholder"
-                    x={x + 4}
-                    y={y + 20}
-                    style={{ fontSize: 16, fontFamily: 'Inter, system-ui, sans-serif' }}
+                    x={x + fs * 0.25}
+                    y={y + fs * 1.25}
+                    style={{ fontSize: fs, fontFamily: 'Inter, system-ui, sans-serif' }}
                   >
                     Double-click to edit
                   </text>
@@ -708,6 +726,7 @@ export default function CanvasSurface({
             strokeWidth: 2,
             text: null,
             textColor: null,
+            fontSize: 16,
           };
         }
 
@@ -724,6 +743,7 @@ export default function CanvasSurface({
           strokeWidth: 2,
           text: null,
           textColor: null,
+          fontSize: 16,
         };
       })()
     : null;
@@ -885,7 +905,7 @@ export default function CanvasSurface({
             <foreignObject x={screenX} y={screenY} width={screenW} height={screenH}>
               <textarea
                 className="text-edit-overlay"
-                style={{ width: '100%', height: '100%' }}
+                style={{ width: '100%', height: '100%', fontSize: effectiveFontSize(obj.fontSize, obj.type) }}
                 value={editingTextValue}
                 onChange={(e) => setEditingTextValue(e.target.value)}
                 onKeyDown={(e) => {
