@@ -114,6 +114,17 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 The `web` container starts with a temporary self-signed certificate so nginx can
 bind :443 before Let's Encrypt has issued the real one.
 
+### Migrations
+
+Apply any one-off migrations in `collaborative-canvas/src/main/resources/migrate-*.sql`
+after the stack is up (they are written to be idempotent):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres \
+  psql -U postgres -d collaborative_canvas < src/main/resources/migrate-font-size.sql
+# ...repeat for any other migrate-*.sql
+```
+
 ## 6. DNS
 
 The domain is managed at **Namecheap**. In **Domain List → syncboard.me → Manage →
