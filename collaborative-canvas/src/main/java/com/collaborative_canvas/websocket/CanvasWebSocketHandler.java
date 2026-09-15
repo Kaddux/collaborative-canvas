@@ -1,5 +1,6 @@
 package com.collaborative_canvas.websocket;
 
+import com.collaborative_canvas.service.CanvasOperationProducer;
 import com.collaborative_canvas.service.CanvasService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,8 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
 
     private final CanvasService canvasService;
 
+    private final CanvasOperationProducer canvasOperationProducer;
+
     private final Map<String, Set<WebSocketSession>> rooms =
             new ConcurrentHashMap<>();
     private final Map<String, String> clientIds =
@@ -31,6 +34,9 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
             new ConcurrentHashMap<>();
 
     private final Map<String, AtomicLong> lastAppliedSequences =
+            new ConcurrentHashMap<>();
+
+    private final Map<String, CanvasHistory> histories =
             new ConcurrentHashMap<>();
 
     private final ObjectMapper objectMapper;
@@ -96,6 +102,8 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
 
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(syncMessage)));
 
+        sendHistoryState(session, canvasId, clientId);
+
         int totalClients = rooms.values().stream()
                 .mapToInt(Set::size)
                 .sum();
@@ -137,6 +145,11 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
             broadcastPresence(session, message);
             return;
         }
+        if ("UNDO".equals(operation.getType())
+                || "REDO".equals(operation.getType())) {
+            handleHistoryAction(session, operation.getType());
+            return;
+        }
         if(!operation.getType().equals("CREATE_OBJECT")
                 && operation.getObjectId() == null) {
             sendError(session, "Object ID is required");
@@ -145,6 +158,22 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
 
         String canvasId = extractCanvasId(session);
         operation.setOperationId(UUID.randomUUID().toString());
+
+        dispatchOperation(session, canvasId, operation, true);
+    }
+
+    /**
+     * Assigns the next sequence, applies the operation, logs it, records history and
+     * broadcasts it. Synthesized undo/redo operations pass {@code recordHistory=false}
+     * because {@link CanvasHistory} has already moved the entry between its stacks.
+     */
+    private void dispatchOperation(
+            WebSocketSession session,
+            String canvasId,
+            CanvasOperation operation,
+            boolean recordHistory) throws IOException {
+
+        String clientId = clientIds.get(session.getId());
         AtomicLong sequence = canvasSequences.computeIfAbsent(canvasId,
                 id -> new AtomicLong());
 
@@ -159,18 +188,72 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            OperationResult result = applyOperation(canvasId, operation);
+            CanvasService.OperationResult result = applyOperation(canvasId, operation);
 
-            if (result.success()) {
-                lastApplied.set(operation.getSequence());
-
-                broadcastOperation(canvasId, operation, session);
-
-            } else {
-
+            if (!result.success()) {
                 sendError(session, result.error());
+                return;
             }
+
+            lastApplied.set(operation.getSequence());
+
+            // Audit/history only: fire-and-forget, never blocks or fails the operation.
+            canvasOperationProducer.publish(canvasId, clientId, operation);
+
+            if (recordHistory) {
+                histories.computeIfAbsent(canvasId, id -> new CanvasHistory())
+                        .record(clientId, operation, result.before(), result.after());
+            }
+
+            broadcastOperation(canvasId, operation, session);
+            sendHistoryState(session, canvasId, clientId);
         }
+    }
+
+    private void handleHistoryAction(
+            WebSocketSession session,
+            String action) throws IOException {
+
+        String canvasId = extractCanvasId(session);
+        String clientId = clientIds.get(session.getId());
+        CanvasHistory history = histories.get(canvasId);
+
+        CanvasOperation synthesized = null;
+        if (history != null) {
+            synthesized = "UNDO".equals(action)
+                    ? history.undo(clientId)
+                    : history.redo(clientId);
+        }
+
+        if (synthesized == null) {
+            // Nothing to undo/redo for this client; just refresh the button state.
+            sendHistoryState(session, canvasId, clientId);
+            return;
+        }
+
+        synthesized.setOperationId(UUID.randomUUID().toString());
+        dispatchOperation(session, canvasId, synthesized, false);
+    }
+
+    private void sendHistoryState(
+            WebSocketSession session,
+            String canvasId,
+            String clientId) throws IOException {
+
+        CanvasHistory history = histories.get(canvasId);
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("canUndo", history != null && history.canUndo(clientId));
+        metadata.put("canRedo", history != null && history.canRedo(clientId));
+
+        CanvasMessage message = new CanvasMessage();
+        message.setType("HISTORY_STATE");
+        message.setCanvasId(canvasId);
+        message.setClientId(clientId);
+        message.setMetadata(metadata);
+
+        session.sendMessage(
+                new TextMessage(objectMapper.writeValueAsString(message)));
     }
     @Override
     public void afterConnectionClosed(
@@ -198,6 +281,7 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
             rooms.remove(canvasId, clients);
             canvasSequences.remove(canvasId);
             lastAppliedSequences.remove(canvasId);
+            histories.remove(canvasId);
         }
 
         log.info("Client {} disconnected from canvas {}", clientId, canvasId
@@ -214,13 +298,13 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
         return parts[parts.length - 1];
     }
 
-    private OperationResult applyOperation(
+    private CanvasService.OperationResult applyOperation(
             String canvasId,
             CanvasOperation operation) {
 
         switch (operation.getType()) {
             case "CREATE_OBJECT" -> {
-                CanvasService.OperationResult result = canvasService.createObject(
+                return canvasService.createObject(
                         canvasId,
                         operation.getObjectId(),
                         operation.getObjectType() == null
@@ -236,33 +320,30 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                         operation.getStrokeWidth(),
                         operation.getText()
                 );
-                return new OperationResult(result.success(), result.error());
             }
             case "MOVE_OBJECT" -> {
-                CanvasService.OperationResult result = canvasService.moveObject(
+                return canvasService.moveObject(
                         canvasId,
                         operation.getObjectId(),
                         operation.getX(),
                         operation.getY()
                 );
-                return new OperationResult(result.success(), result.error());
             }
             case "DELETE_OBJECT" -> {
-                CanvasService.OperationResult result = canvasService.deleteObject(
+                return canvasService.deleteObject(
                         canvasId,
                         operation.getObjectId()
                 );
-                return new OperationResult(result.success(), result.error());
             }
             case "UPDATE_OBJECT" -> {
-                CanvasService.OperationResult result = canvasService.updateObject(
+                return canvasService.updateObject(
                         canvasId,
                         operation
                 );
-                return new OperationResult(result.success(), result.error());
             }
             default -> {
-                return new OperationResult(false, "Unknown operation: " + operation.getType());
+                return CanvasService.OperationResult.failure(
+                        "Unknown operation: " + operation.getType());
             }
         }
     }
@@ -299,11 +380,6 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 );
             }
         }
-    }
-    private record OperationResult(
-            boolean success,
-            String error
-    ) {
     }
     private String extractClientId(WebSocketSession session) {
 

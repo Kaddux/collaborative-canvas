@@ -5,6 +5,8 @@ import './Toolbar.css';
 
 interface Props {
   onDelete: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 const TOOLS: { tool: Tool; label: string; shortcut: string; icon: ReactElement }[] = [
@@ -84,10 +86,12 @@ const TOOLS: { tool: Tool; label: string; shortcut: string; icon: ReactElement }
   },
 ];
 
-export default function Toolbar({ onDelete }: Props) {
+export default function Toolbar({ onDelete, onUndo, onRedo }: Props) {
   const activeTool = useCanvasStore((s) => s.activeTool);
   const setActiveTool = useCanvasStore((s) => s.setActiveTool);
   const selectedObjectId = useCanvasStore((s) => s.selectedObjectId);
+  const canUndo = useCanvasStore((s) => s.canUndo);
+  const canRedo = useCanvasStore((s) => s.canRedo);
   const peers = useCanvasStore((s) => s.peers);
   const connected = useCanvasStore((s) => s.connected);
   const canvasName = useCanvasStore((s) => s.canvasName);
@@ -100,6 +104,20 @@ export default function Toolbar({ onDelete }: Props) {
         e.target instanceof HTMLTextAreaElement
       )
         return;
+
+      const modifier = e.ctrlKey || e.metaKey;
+      if (modifier) {
+        const shortcut = e.key.toUpperCase();
+        if (shortcut === 'Z') {
+          e.preventDefault();
+          if (e.shiftKey) onRedo();
+          else onUndo();
+        } else if (shortcut === 'Y') {
+          e.preventDefault();
+          onRedo();
+        }
+        return;
+      }
 
       const key = e.key.toUpperCase();
       const toolMap: Record<string, Tool> = {
@@ -122,7 +140,7 @@ export default function Toolbar({ onDelete }: Props) {
         onDelete();
       }
     },
-    [setActiveTool, selectedObjectId, onDelete],
+    [setActiveTool, selectedObjectId, onDelete, onUndo, onRedo],
   );
 
   useEffect(() => {
@@ -151,6 +169,32 @@ export default function Toolbar({ onDelete }: Props) {
       ))}
 
       <div className="toolbar-sep" />
+
+      <button
+        id="tool-undo"
+        className="toolbar-btn"
+        title="Undo (Ctrl+Z)"
+        disabled={!canUndo}
+        onClick={onUndo}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 14 4 9 9 4" />
+          <path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+        </svg>
+      </button>
+
+      <button
+        id="tool-redo"
+        className="toolbar-btn"
+        title="Redo (Ctrl+Shift+Z)"
+        disabled={!canRedo}
+        onClick={onRedo}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 14 20 9 15 4" />
+          <path d="M20 9H9a5 5 0 0 0 0 10h3" />
+        </svg>
+      </button>
 
       <button
         id="tool-delete"

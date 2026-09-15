@@ -2,17 +2,18 @@ import { useCanvasStore } from '../store/canvasStore';
 import type { CanvasObject } from '../types/canvas';
 import './StylePanel.css';
 
-const FILL_COLORS = [
-  '#ffffff', '#f8f9fa', '#e9ecef', '#dee2e6',
-  '#fff3bf', '#d3f9d8', '#d0ebff', '#e5dbff',
-  '#ffc9c9', '#ffdeeb', '#c3fae8', '#a5d8ff',
-];
+// Single paired palette: each stroke shares a row position with its matching pastel fill.
+const PALETTE = [
+  { stroke: '#1E1E1E', fill: '#FFFFFF' },
+  { stroke: '#E03131', fill: '#FFC9C9' },
+  { stroke: '#2F9E44', fill: '#B2F2BB' },
+  { stroke: '#1971C2', fill: '#A5D8FF' },
+  { stroke: '#F08C00', fill: '#FFEC99' },
+  { stroke: '#9C36B5', fill: '#EEBEFA' },
+] as const;
 
-const STROKE_COLORS = [
-  '#000000', '#343a40', '#495057', '#868e96',
-  '#e03131', '#2f9e44', '#1971c2', '#9c36b5',
-  '#f08c00', '#0c8599', '#e8590c', '#6741d9',
-];
+const sameColor = (a: string | null | undefined, b: string) =>
+  (a ?? '').toLowerCase() === b.toLowerCase();
 
 const STROKE_WIDTHS = [
   { label: 'Thin', value: 1 },
@@ -44,24 +45,24 @@ export default function StylePanel({ onUpdateStyle }: Props) {
 
           <h3>Fill</h3>
           <div className="color-swatches">
-            {FILL_COLORS.map((c) => (
+            {PALETTE.map(({ fill }) => (
               <div
-                key={c}
-                className={`color-swatch ${selectedObject.color === c ? 'active' : ''}`}
-                style={{ background: c }}
-                onClick={() => onUpdateStyle(selectedObject.objectId, { color: c })}
+                key={fill}
+                className={`color-swatch ${sameColor(selectedObject.color, fill) ? 'active' : ''}`}
+                style={{ background: fill }}
+                onClick={() => onUpdateStyle(selectedObject.objectId, { color: fill })}
               />
             ))}
           </div>
 
           <h3>Stroke</h3>
           <div className="color-swatches">
-            {STROKE_COLORS.map((c) => (
+            {PALETTE.map(({ stroke }) => (
               <div
-                key={c}
-                className={`color-swatch ${selectedObject.strokeColor === c ? 'active' : ''}`}
-                style={{ background: c }}
-                onClick={() => onUpdateStyle(selectedObject.objectId, { strokeColor: c })}
+                key={stroke}
+                className={`color-swatch ${sameColor(selectedObject.strokeColor, stroke) ? 'active' : ''}`}
+                style={{ background: stroke }}
+                onClick={() => onUpdateStyle(selectedObject.objectId, { strokeColor: stroke })}
               />
             ))}
           </div>

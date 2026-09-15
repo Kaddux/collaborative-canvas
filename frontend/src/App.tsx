@@ -115,6 +115,13 @@ export default function App() {
               s.updatePeerCursor(msg.clientId, msg.cursor);
               break;
 
+            case 'HISTORY_STATE':
+              s.setHistoryState(
+                msg.metadata?.canUndo ?? false,
+                msg.metadata?.canRedo ?? false,
+              );
+              break;
+
             case 'ERROR':
               if (s.pendingResize) s.rollbackResize(s.pendingResize.objectId);
               s.handleError(typeof msg.payload === 'string' ? msg.payload : 'Unknown error');
@@ -174,15 +181,25 @@ export default function App() {
   }, []);
 
   const handleResizeObject = useCallback((objectId: string, x: number, y: number, width: number, height: number) => {
+    const obj = store.getState().objects.get(objectId);
+    if (!obj) return;
+    // UPDATE_OBJECT overwrites every field server-side, so send a full snapshot; a
+    // partial payload would zero out rotation/colors/text.
     wsRef.current?.send({
       type: 'UPDATE_OBJECT',
       objectId,
+      objectType: obj.type,
       x,
       y,
       width,
       height,
+      rotation: obj.rotation,
+      color: obj.color,
+      strokeColor: obj.strokeColor,
+      strokeWidth: obj.strokeWidth,
+      text: obj.text,
     });
-  }, []);
+  }, [store]);
 
   const handleDeleteObject = useCallback((objectId: string) => {
     store.getState().optimisticDelete(objectId);
@@ -197,6 +214,14 @@ export default function App() {
     if (id) handleDeleteObject(id);
   }, [store, handleDeleteObject]);
 
+  const handleUndo = useCallback(() => {
+    wsRef.current?.send({ type: 'UNDO' });
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    wsRef.current?.send({ type: 'REDO' });
+  }, []);
+
   const handlePresenceUpdate = useCallback((cursor: Point) => {
     // The current backend rejects PRESENCE messages. Keep this callback as the
     // integration point for the server-side presence passthrough.
@@ -206,7 +231,53 @@ export default function App() {
   const handleUpdateStyle = useCallback(
     (objectId: string, fields: Partial<Pick<CanvasObject, 'color' | 'strokeColor' | 'strokeWidth'>>) => {
       const s = store.getState();
+      const obj = s.objects.get(objectId);
+      if (!obj) return;
+
       s.optimisticUpdate(objectId, fields);
+      const merged = { ...obj, ...fields };
+
+      wsRef.current?.send({
+        type: 'UPDATE_OBJECT',
+        objectId,
+        objectType: merged.type,
+        x: merged.x,
+        y: merged.y,
+        width: merged.width,
+        height: merged.height,
+        rotation: merged.rotation,
+        color: merged.color,
+        strokeColor: merged.strokeColor,
+        strokeWidth: merged.strokeWidth,
+        text: merged.text,
+      });
+    },
+    [store],
+  );
+
+  const handleUpdateText = useCallback(
+    (objectId: string, text: string) => {
+      const s = store.getState();
+      const obj = s.objects.get(objectId);
+      if (!obj) return;
+
+      s.optimisticUpdate(objectId, { text });
+      const merged = { ...obj, text };
+
+      wsRef.current?.send({
+        type: 'UPDATE_OBJECT',
+        objectId,
+        objectType: merged.type,
+        x: merged.x,
+        y: merged.y,
+        width: merged.width,
+        height: merged.height,
+        rotation: merged.rotation,
+        color: merged.color,
+        strokeColor: merged.strokeColor,
+        strokeWidth: merged.strokeWidth,
+        text: merged.text,
+      });
     },
     [store],
   );
@@ -222,9 +293,10 @@ export default function App() {
         onCreateObject={handleCreateObject}
         onMoveObject={handleMoveObject}
         onResizeObject={handleResizeObject}
+        onUpdateText={handleUpdateText}
         onPresenceUpdate={handlePresenceUpdate}
       />
-      <Toolbar onDelete={handleDelete} />
+      <Toolbar onDelete={handleDelete} onUndo={handleUndo} onRedo={handleRedo} />
       <StylePanel onUpdateStyle={handleUpdateStyle} />
     </>
   );

@@ -18,6 +18,7 @@ interface Props {
   onCreateObject: (obj: CanvasObject) => void;
   onMoveObject: (objectId: string, x: number, y: number) => void;
   onResizeObject: (objectId: string, x: number, y: number, width: number, height: number) => void;
+  onUpdateText: (objectId: string, text: string) => void;
   onPresenceUpdate: (cursor: Point) => void;
 }
 
@@ -54,6 +55,7 @@ export default function CanvasSurface({
   onCreateObject,
   onMoveObject,
   onResizeObject,
+  onUpdateText,
   onPresenceUpdate,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -81,6 +83,9 @@ export default function CanvasSurface({
   // ── Text editing state ──
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextValue, setEditingTextValue] = useState('');
+  // Tracks the active edit id synchronously so a commit followed by unmount-blur
+  // doesn't send the update twice.
+  const editingTextIdRef = useRef<string | null>(null);
 
   // ── Space key for pan ──
   useEffect(() => {
@@ -258,7 +263,7 @@ export default function CanvasSurface({
           height: typeDefaults.height ?? height,
           rotation: 0,
           color: typeDefaults.color ?? '#ffffff',
-          strokeColor: typeDefaults.strokeColor ?? '#000000',
+          strokeColor: typeDefaults.strokeColor ?? '#1E1E1E',
           strokeWidth: typeDefaults.strokeWidth ?? 2,
           text: null,
         };
@@ -369,11 +374,23 @@ export default function CanvasSurface({
       const obj = objects.get(objectId);
       if (!obj) return;
       if (obj.type === 'TEXT' || obj.type === 'STICKY_NOTE') {
+        editingTextIdRef.current = objectId;
         setEditingTextId(objectId);
         setEditingTextValue(obj.text ?? '');
       }
     },
     [objects],
+  );
+
+  const finishTextEdit = useCallback(
+    (save: boolean) => {
+      const id = editingTextIdRef.current;
+      if (!id) return;
+      editingTextIdRef.current = null;
+      if (save) onUpdateText(id, editingTextValue);
+      setEditingTextId(null);
+    },
+    [editingTextValue, onUpdateText],
   );
 
   // ── Cursor class ──
@@ -389,6 +406,7 @@ export default function CanvasSurface({
   const renderShape = (obj: CanvasObject, isGhost = false) => {
     const { objectId, type, x, y, width, height, color, strokeColor, strokeWidth, text } = obj;
     const isSelected = objectId === selectedObjectId && !isGhost;
+    const isEditing = objectId === editingTextId;
     const className = isGhost ? 'drawing-ghost' : `canvas-object ${isSelected ? 'selected' : ''}`;
 
     const commonProps = {
@@ -509,14 +527,28 @@ export default function CanvasSurface({
               stroke={isSelected ? 'transparent' : 'transparent'}
               strokeWidth={0}
             />
-            <text
-              x={x + 4}
-              y={y + 20}
-              fill="#f0f0f0"
-              style={{ fontSize: 16, fontFamily: 'Inter, system-ui, sans-serif' }}
-            >
-              {text || (isGhost ? '' : 'Double-click to edit')}
-            </text>
+            {!isEditing &&
+              (text ? (
+                <text
+                  x={x + 4}
+                  y={y + 20}
+                  fill="#1e1e1e"
+                  style={{ fontSize: 16, fontFamily: 'Inter, system-ui, sans-serif' }}
+                >
+                  {text}
+                </text>
+              ) : (
+                !isGhost && (
+                  <text
+                    className="text-placeholder"
+                    x={x + 4}
+                    y={y + 20}
+                    style={{ fontSize: 16, fontFamily: 'Inter, system-ui, sans-serif' }}
+                  >
+                    Double-click to edit
+                  </text>
+                )
+              ))}
           </g>
         );
         break;
@@ -678,10 +710,16 @@ export default function CanvasSurface({
                 style={{ width: '100%', height: '100%' }}
                 value={editingTextValue}
                 onChange={(e) => setEditingTextValue(e.target.value)}
-                onBlur={() => {
-                  // TODO: Send text update when UPDATE_OBJECT is supported
-                  setEditingTextId(null);
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    finishTextEdit(false);
+                  } else if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    finishTextEdit(true);
+                  }
                 }}
+                onBlur={() => finishTextEdit(true)}
                 autoFocus
               />
             </foreignObject>

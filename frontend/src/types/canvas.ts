@@ -69,7 +69,14 @@ export interface OutboundPresence {
   cursor: Point;
 }
 
-export type OutboundMessage = OutboundOperation | OutboundPresence;
+export interface OutboundHistoryAction {
+  type: 'UNDO' | 'REDO';
+}
+
+export type OutboundMessage =
+  | OutboundOperation
+  | OutboundPresence
+  | OutboundHistoryAction;
 
 // ── Inbound messages (server → client) ──────────────────────────────
 export interface InboundOperation {
@@ -129,12 +136,23 @@ export interface InboundError {
   payload: string;
 }
 
+export interface InboundHistoryState {
+  type: 'HISTORY_STATE';
+  canvasId: string;
+  clientId?: string;
+  metadata?: {
+    canUndo?: boolean;
+    canRedo?: boolean;
+  };
+}
+
 export type InboundMessage =
   | InboundOperation
   | InboundSyncState
   | InboundClientJoined
   | InboundClientLeft
   | InboundPresence
+  | InboundHistoryState
   | InboundError;
 
 // ── Canvas metadata (REST responses) ────────────────────────────────

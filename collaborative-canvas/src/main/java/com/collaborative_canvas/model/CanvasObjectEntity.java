@@ -47,7 +47,7 @@ public class CanvasObjectEntity {
             double y) {
 
         this(objectId, canvasId, "RECTANGLE", x, y, 200, 100, 0,
-                "#ffffff", "#000000", 2, null);
+                "#ffffff", "#1E1E1E", 2, null);
     }
 
     public CanvasObjectEntity(

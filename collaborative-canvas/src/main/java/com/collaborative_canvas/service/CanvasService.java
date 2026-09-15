@@ -38,7 +38,7 @@ public class CanvasService {
             double y) {
 
                 return createObject(canvasId, objectId, "RECTANGLE", x, y,
-                                200, 100, 0, "#ffffff", "#000000", 2, null);
+                                200, 100, 0, "#ffffff", "#1E1E1E", 2, null);
         }
 
         @Transactional
@@ -57,21 +57,21 @@ public class CanvasService {
                         String text) {
 
                 if (objectId == null || objectId.isBlank()) {
-                        return new OperationResult(false, "Object ID is required");
+                        return OperationResult.failure("Object ID is required");
                 }
                 if (type == null) {
-                        return new OperationResult(false, "Object type is required");
+                        return OperationResult.failure("Object type is required");
                 }
                 try {
                         CanvasObjectType.valueOf(type);
                 } catch (IllegalArgumentException exception) {
-                        return new OperationResult(false, "Invalid object type");
+                        return OperationResult.failure("Invalid object type");
                 }
                 if (width < 0 || height < 0) {
-                        return new OperationResult(false, "Width and height cannot be negative");
+                        return OperationResult.failure("Width and height cannot be negative");
                 }
                 if (strokeWidth < 0) {
-                        return new OperationResult(false, "strokeWidth cannot be negative");
+                        return OperationResult.failure("strokeWidth cannot be negative");
                 }
 
         Map<String, CanvasObject> objects =
@@ -98,10 +98,7 @@ public class CanvasService {
                 objects.putIfAbsent(objectId, object);
 
         if (existing != null) {
-            return new OperationResult(
-                    false,
-                    "Object already exists"
-            );
+            return OperationResult.failure("Object already exists");
         }
 
         canvasRepository.save(
@@ -121,7 +118,7 @@ public class CanvasService {
                 )
         );
 
-        return new OperationResult(true, null);
+        return OperationResult.applied(null, object.copy());
     }
 
     public CanvasObject getObject(
@@ -159,8 +156,10 @@ public class CanvasService {
         CanvasObject object =
                 getObject(canvasId, objectId);
         if (object == null) {
-            return new OperationResult(false, "Object does not exist");
+            return OperationResult.failure("Object does not exist");
         }
+
+        CanvasObject before = object.copy();
 
         synchronized (object) {
             object.setX(x);
@@ -178,7 +177,7 @@ public class CanvasService {
             canvasRepository.save(entity);
         }
 
-        return new OperationResult(true, null);
+        return OperationResult.applied(before, object.copy());
     }
 
         @Transactional
@@ -188,26 +187,31 @@ public class CanvasService {
 
         Map<String, CanvasObject> objects = canvasObjects.get(canvasId);
 
-        if (objects == null || objects.remove(objectId) == null) {
+        if (objects == null) {
+            return OperationResult.failure("Object does not exist");
+        }
 
-            return new OperationResult(false, "Object does not exist");
+        CanvasObject removed = objects.remove(objectId);
+
+        if (removed == null) {
+            return OperationResult.failure("Object does not exist");
         }
 
         canvasRepository.deleteById(objectId);
 
-        return new OperationResult(true, null);
+        return OperationResult.applied(removed, null);
     }
 
     @Transactional
     public OperationResult updateObject(String canvasId, CanvasOperation op) {
 
         if (op.getObjectId() == null || op.getObjectId().isBlank()) {
-            return new OperationResult(false, "objectId is required");
+            return OperationResult.failure("objectId is required");
         }
 
         Map<String, CanvasObject> room = canvasObjects.get(canvasId);
         if (room == null || !room.containsKey(op.getObjectId())) {
-            return new OperationResult(false,"Object not found: " + op.getObjectId());
+            return OperationResult.failure("Object not found: " + op.getObjectId());
         }
 
         // server-side clamping
@@ -217,8 +221,11 @@ public class CanvasService {
 
         CanvasObject object = room.get(op.getObjectId());
 
+        CanvasObject before = object.copy();
+
         synchronized (object) {
-            object.setType(op.getType());
+            // The object type is identity, not a mutable style field: UPDATE_OBJECT never
+            // changes it. (The operation type is not the object type.)
             object.setX(op.getX());
             object.setY(op.getY());
             object.setWidth(width);
@@ -243,7 +250,7 @@ public class CanvasService {
             canvasRepository.save(entity);
         });
 
-        return new OperationResult(true,null);
+        return OperationResult.applied(before, object.copy());
     }
 
     public Collection<CanvasObject> loadObjects(String canvasId) {
@@ -333,6 +340,16 @@ public class CanvasService {
 
     public record OperationResult(
             boolean success,
-            String error
-    ) {}
+            String error,
+            CanvasObject before,
+            CanvasObject after
+    ) {
+        public static OperationResult failure(String error) {
+            return new OperationResult(false, error, null, null);
+        }
+
+        public static OperationResult applied(CanvasObject before, CanvasObject after) {
+            return new OperationResult(true, null, before, after);
+        }
+    }
 }

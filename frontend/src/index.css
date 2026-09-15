@@ -8,6 +8,23 @@
   --accent: #4263eb;
   --accent-hover: #3b5bdb;
   --error: #e03131;
+
+  /* Shared dark "chrome" tokens for floating UI (toolbar + style panel). */
+  --surface-raised: rgba(20, 20, 30, 0.9);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --surface-border-subtle: rgba(255, 255, 255, 0.06);
+  --surface-inset: rgba(255, 255, 255, 0.05);
+  --surface-inset-highlight: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.08);
+  --shadow: rgba(0, 0, 0, 0.3);
+  --ink-muted: rgba(255, 255, 255, 0.6);
+  --ink-faint: rgba(255, 255, 255, 0.5);
+  --ink-strong: rgba(255, 255, 255, 0.8);
+  --ink-bright: rgba(255, 255, 255, 0.9);
+  --ink-disabled: rgba(255, 255, 255, 0.25);
+  --accent-soft: rgba(66, 99, 235, 0.3);
+  --accent-subtle: rgba(66, 99, 235, 0.15);
+  --accent-active: rgba(66, 99, 235, 0.18);
 }
 
 *,

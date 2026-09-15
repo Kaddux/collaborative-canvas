@@ -232,6 +232,43 @@ class CanvasServiceTest {
                 assertEquals("Object not found: missing", result.error());
     }
 
+    @Test
+    void updateObjectPreservesObjectType() {
+        canvasService.createObject("canvas-1", "object-1", "ELLIPSE", 10, 20,
+                200, 100, 0, "#ffffff", "#000000", 2, null);
+        when(canvasRepository.findById("object-1"))
+                .thenReturn(Optional.of(new CanvasObjectEntity(
+                        "object-1", "canvas-1", "ELLIPSE", 10, 20,
+                        200, 100, 0, "#ffffff", "#000000", 2, null)));
+
+        canvasService.updateObject("canvas-1",
+                updateOperation("object-1", 10, 20, 300, 150, 0, "#ff0000", "#000000", 2, null));
+
+        assertEquals("ELLIPSE", canvasService.getObject("canvas-1", "object-1").getType());
+    }
+
+    @Test
+    void operationResultCarriesBeforeAndAfterSnapshots() {
+        canvasService.createObject("canvas-1", "object-1", 10, 20);
+
+        CanvasService.OperationResult move = canvasService.moveObject(
+                "canvas-1", "object-1", 50, 60);
+
+        assertTrue(move.success());
+        assertEquals(10, move.before().getX());
+        assertEquals(20, move.before().getY());
+        assertEquals(50, move.after().getX());
+        assertEquals(60, move.after().getY());
+
+        CanvasService.OperationResult delete = canvasService.deleteObject(
+                "canvas-1", "object-1");
+
+        assertTrue(delete.success());
+        assertNotNull(delete.before());
+        assertNull(delete.after());
+        assertEquals("object-1", delete.before().getObjectId());
+    }
+
         private CanvasOperation updateOperation(
                         String objectId,
                         double x,

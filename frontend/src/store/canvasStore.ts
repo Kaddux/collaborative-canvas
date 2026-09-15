@@ -21,6 +21,10 @@ interface CanvasState {
   sequence: number;
   pendingResize: { objectId: string; snapshot: CanvasObject } | null;
 
+  // ── Undo/redo availability (server-authoritative, per client) ──
+  canUndo: boolean;
+  canRedo: boolean;
+
   // ── Local interaction ──
   activeTool: Tool;
   selectedObjectId: string | null;
@@ -34,6 +38,7 @@ interface CanvasState {
   // ── Actions ──
   setConnection: (canvasId: string, canvasName: string, clientId: string) => void;
   setConnected: (connected: boolean) => void;
+  setHistoryState: (canUndo: boolean, canRedo: boolean) => void;
   setActiveTool: (tool: Tool) => void;
   setSelectedObjectId: (id: string | null) => void;
   setViewport: (viewport: Viewport) => void;
@@ -110,6 +115,9 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   sequence: 0,
   pendingResize: null,
 
+  canUndo: false,
+  canRedo: false,
+
   activeTool: 'SELECT',
   selectedObjectId: null,
 
@@ -124,6 +132,8 @@ export const useCanvasStore = create<CanvasState>((set) => ({
     set({ canvasId, canvasName, clientId }),
 
   setConnected: (connected) => set({ connected }),
+
+  setHistoryState: (canUndo, canRedo) => set({ canUndo, canRedo }),
 
   setActiveTool: (tool) => set({ activeTool: tool }),
 
@@ -244,7 +254,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
         height: op.height ?? 100,
         rotation: op.rotation ?? 0,
         color: op.color ?? '#ffffff',
-        strokeColor: op.strokeColor ?? '#000000',
+        strokeColor: op.strokeColor ?? '#1E1E1E',
         strokeWidth: op.strokeWidth ?? 2,
         text: op.text ?? null,
       };
@@ -365,5 +375,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
       peers: new Map(),
       remoteEditHighlights: new Map(),
       pendingResize: null,
+      canUndo: false,
+      canRedo: false,
     }),
 }));

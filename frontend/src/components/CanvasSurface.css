@@ -62,6 +62,11 @@
   stroke: var(--accent);
   stroke-width: 1.5;
   transition: transform 0.1s;
+  /* Scale about the handle's own centre; without this, SVG scales about the
+     viewport origin and the handle slides out from under the cursor, causing
+     hover flicker/jitter. */
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 .resize-handle-nw,
@@ -103,13 +108,21 @@
   background: transparent;
   border: 2px solid var(--accent);
   border-radius: 4px;
-  color: #f0f0f0;
+  color: #1e1e1e;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 16px;
   padding: 4px 8px;
   outline: none;
   resize: none;
   overflow: hidden;
+}
+
+/* Empty TEXT object hint */
+.text-placeholder {
+  fill: rgba(30, 30, 30, 0.45);
+  font-style: italic;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Object animations for remote changes */

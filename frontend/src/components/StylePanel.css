@@ -4,12 +4,12 @@
   right: -280px;
   width: 260px;
   z-index: 90;
-  background: rgba(20, 20, 30, 0.9);
+  background: var(--surface-raised);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--surface-border);
   border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px var(--shadow);
   transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: 'Inter', system-ui, sans-serif;
 }
@@ -19,7 +19,7 @@
 }
 
 .style-panel h3 {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--ink-faint);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -52,7 +52,7 @@
 
 .color-swatch.active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(66, 99, 235, 0.3);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .stroke-options {
@@ -67,9 +67,9 @@
   justify-content: center;
   height: 36px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.6);
+  background: var(--surface-inset);
+  border: 1px solid var(--surface-border);
+  color: var(--ink-muted);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -77,11 +77,11 @@
 }
 
 .stroke-option:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-hover);
 }
 
 .stroke-option.active {
-  background: rgba(66, 99, 235, 0.15);
+  background: var(--accent-subtle);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -92,7 +92,7 @@
   gap: 8px;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--surface-border-subtle);
 }
 
 .style-panel-object-type .type-icon {
@@ -102,7 +102,7 @@
 }
 
 .style-panel-object-type .type-label {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--ink-strong);
   font-size: 13px;
   font-weight: 600;
 }
