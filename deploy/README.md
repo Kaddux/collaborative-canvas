@@ -19,10 +19,10 @@ are **not** published to the host.
 ## Prerequisites
 
 - Azure for Students subscription (`az login` works).
-- A domain from the GitHub Student Pack (Name.com), e.g. `canvas.example.dev`.
+- A domain from the GitHub Student Pack (Name.com), e.g. `syncboard.me`.
 - `docker-compose.prod.yml`, the Dockerfiles and nginx config from this repo.
 
-## 1. Provision the VM (B2s, 4 GB)
+## 1. Provision the VM (Standard_B2als_v2, 4 GB)
 
 ```bash
 az login
@@ -32,12 +32,17 @@ az vm create \
   --resource-group collaborative-canvas-rg \
   --name canvas-vm \
   --image Ubuntu2204 \
-  --size Standard_B2s \
+  --size Standard_B2als_v2 \
   --admin-username azureuser \
+  --public-ip-sku Standard \
   --generate-ssh-keys
 
 az vm show -d -g collaborative-canvas-rg -n canvas-vm --query publicIps -o tsv
 ```
+
+> The B-series `…t_v2` sizes (e.g. `Standard_B2ats_v2`) are 1 GB — too small for Kafka +
+> Postgres + the JVM. Use a 4 GB size or larger. `--public-ip-sku Standard` gives a
+> **static** public IP so DNS keeps working across deallocate/start.
 
 ### Network security group — only 22/80/443
 
@@ -92,7 +97,7 @@ nano .env
 ```
 
 Fill in `POSTGRES_PASSWORD`, `WEBSOCKET_ALLOWED_ORIGINS` (e.g.
-`https://canvas.example.dev`), `DOMAIN`, `LETSENCRYPT_EMAIL`.
+`https://syncboard.me`), `DOMAIN`, `LETSENCRYPT_EMAIL`.
 
 ## 5. Bring up the stack
 
@@ -107,15 +112,17 @@ bind :443 before Let's Encrypt has issued the real one.
 ## 6. DNS
 
 At Name.com, create an `A` record for your domain pointing at `<VM_PUBLIC_IP>`
-(optionally a `www` CNAME). Wait for propagation: `dig +short canvas.example.dev`.
+(optionally a `www` CNAME). Wait for propagation: `dig +short syncboard.me`.
 
 ## 7. TLS via Let's Encrypt
 
 ```bash
 set -a; . ./.env; set +a   # loads $DOMAIN and $LETSENCRYPT_EMAIL
 
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot \
-  certonly --webroot -w /var/www/certbot \
+# The certbot service's entrypoint is the renewal loop, so override it for this one-off
+# issuance (otherwise the loop runs and `certonly` is ignored).
+docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
+  --entrypoint certbot certbot certonly --webroot -w /var/www/certbot \
   -d "$DOMAIN" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
 
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web nginx -s reload
@@ -162,6 +169,14 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 # stop
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ```
+
+## Cost & lifecycle
+
+- The VM (`Standard_B2als_v2`) is ~$18/month; the $100 student credit covers roughly
+  5+ months of 24/7 runtime (longer if you deallocate when idle).
+- Deallocate to stop compute billing (the static public IP and disk remain):
+  `az vm deallocate -g collaborative-canvas-rg -n canvas-vm` (restart with `az vm start …`).
+- Set a Cost Management budget alert (e.g. $80) so you are warned before the credit runs out.
 
 ## Notes / limitations
 
