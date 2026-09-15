@@ -1,5 +1,6 @@
-import { useEffect, useCallback, type ReactElement } from 'react';
+import { useEffect, useCallback, useRef, useState, type ReactElement } from 'react';
 import { useCanvasStore } from '../store/canvasStore';
+import { buildShareLink } from '../utils/shareLink';
 import type { Tool } from '../types/canvas';
 import './Toolbar.css';
 
@@ -17,6 +18,19 @@ const TOOLS: { tool: Tool; label: string; shortcut: string; icon: ReactElement }
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+      </svg>
+    ),
+  },
+  {
+    tool: 'GRAB',
+    label: 'Grab',
+    shortcut: 'H',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v5" />
+        <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6" />
+        <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" />
+        <path d="M18 8v6a6 6 0 0 1-6 6h-2a8 8 0 0 1-8-8v-3a2 2 0 0 1 4 0" />
       </svg>
     ),
   },
@@ -95,6 +109,49 @@ export default function Toolbar({ onDelete, onUndo, onRedo }: Props) {
   const peers = useCanvasStore((s) => s.peers);
   const connected = useCanvasStore((s) => s.connected);
   const canvasName = useCanvasStore((s) => s.canvasName);
+  const canvasId = useCanvasStore((s) => s.canvasId);
+
+  const [shareFeedback, setShareFeedback] = useState<'idle' | 'copied' | 'error'>('idle');
+  const shareTimerRef = useRef<number | null>(null);
+
+  const copyText = useCallback(async (text: string): Promise<boolean> => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // fall through to the legacy path
+    }
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    if (!canvasId) return;
+    const ok = await copyText(buildShareLink(canvasId));
+    setShareFeedback(ok ? 'copied' : 'error');
+    if (shareTimerRef.current) window.clearTimeout(shareTimerRef.current);
+    shareTimerRef.current = window.setTimeout(() => setShareFeedback('idle'), 1600);
+  }, [canvasId, copyText]);
+
+  useEffect(
+    () => () => {
+      if (shareTimerRef.current) window.clearTimeout(shareTimerRef.current);
+    },
+    [],
+  );
 
   const handleKeyboard = useCallback(
     (e: KeyboardEvent) => {
@@ -122,6 +179,7 @@ export default function Toolbar({ onDelete, onUndo, onRedo }: Props) {
       const key = e.key.toUpperCase();
       const toolMap: Record<string, Tool> = {
         V: 'SELECT',
+        H: 'GRAB',
         R: 'RECTANGLE',
         E: 'ELLIPSE',
         D: 'DIAMOND',
@@ -208,6 +266,31 @@ export default function Toolbar({ onDelete, onUndo, onRedo }: Props) {
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
         </svg>
       </button>
+
+      <button
+        id="tool-share"
+        className="toolbar-btn"
+        title={
+          shareFeedback === 'copied'
+            ? 'Link copied!'
+            : shareFeedback === 'error'
+              ? 'Copy failed'
+              : 'Copy share link'
+        }
+        disabled={!canvasId}
+        onClick={handleShare}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      </button>
+      <span className="toolbar-share-status" role="status" aria-live="polite">
+        {shareFeedback === 'copied' ? 'Link copied' : shareFeedback === 'error' ? 'Copy failed' : ''}
+      </span>
 
       {peerEntries.length > 0 && (
         <>

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { useCanvasStore } from '../store/canvasStore';
 import { screenToCanvas } from '../utils/transform';
+import { angleBetween, normalizeDeg } from '../utils/geometry';
 import { generateObjectId } from '../utils/idgen';
 import { hashClientIdToColor } from '../utils/colors';
 import type { CanvasObject, CanvasObjectType, Point } from '../types/canvas';
@@ -18,6 +19,7 @@ interface Props {
   onCreateObject: (obj: CanvasObject) => void;
   onMoveObject: (objectId: string, x: number, y: number) => void;
   onResizeObject: (objectId: string, x: number, y: number, width: number, height: number) => void;
+  onRotateObject: (objectId: string, rotation: number) => void;
   onUpdateText: (objectId: string, text: string) => void;
   onPresenceUpdate: (cursor: Point) => void;
 }
@@ -48,6 +50,14 @@ interface ResizeState {
   objectStartHeight: number;
 }
 
+interface RotateState {
+  objectId: string;
+}
+
+interface EndpointState {
+  objectId: string;
+}
+
 const GRID_SIZE = 20;
 const MIN_OBJECT_SIZE = 20;
 
@@ -55,6 +65,7 @@ export default function CanvasSurface({
   onCreateObject,
   onMoveObject,
   onResizeObject,
+  onRotateObject,
   onUpdateText,
   onPresenceUpdate,
 }: Props) {
@@ -75,6 +86,8 @@ export default function CanvasSurface({
   const [drawState, setDrawState] = useState<DrawState | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [resizeState, setResizeState] = useState<ResizeState | null>(null);
+  const [rotateState, setRotateState] = useState<RotateState | null>(null);
+  const [endpointState, setEndpointState] = useState<EndpointState | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
@@ -127,7 +140,7 @@ export default function CanvasSurface({
   // ── Mouse down ──
   const handleMouseDown = useCallback(
     (e: ReactMouseEvent<SVGSVGElement>) => {
-      if (e.button === 1 || (e.button === 0 && spaceDown)) {
+      if (e.button === 1 || (e.button === 0 && (spaceDown || activeTool === 'GRAB'))) {
         // Middle mouse or space+left = pan
         setIsPanning(true);
         setPanStart({ x: e.clientX, y: e.clientY });
@@ -170,6 +183,31 @@ export default function CanvasSurface({
         const dy = e.clientY - panStart.y;
         panViewport(dx, dy);
         setPanStart({ x: e.clientX, y: e.clientY });
+        return;
+      }
+
+      if (endpointState) {
+        const obj = objects.get(endpointState.objectId);
+        if (obj) {
+          const pointer = screenToCanvas(e.clientX, e.clientY, viewport);
+          const dx = pointer.x - obj.x;
+          const dy = pointer.y - obj.y;
+          let rotation = angleBetween({ x: obj.x, y: obj.y }, pointer);
+          if (e.shiftKey) rotation = normalizeDeg(Math.round(rotation / 15) * 15);
+          const width = Math.max(Math.hypot(dx, dy), MIN_OBJECT_SIZE);
+          optimisticUpdate(endpointState.objectId, { width, rotation });
+        }
+        return;
+      }
+
+      if (rotateState) {
+        const obj = objects.get(rotateState.objectId);
+        if (obj) {
+          const pointer = screenToCanvas(e.clientX, e.clientY, viewport);
+          let rotation = angleBetween({ x: obj.x, y: obj.y }, pointer);
+          if (e.shiftKey) rotation = normalizeDeg(Math.round(rotation / 15) * 15);
+          optimisticUpdate(rotateState.objectId, { rotation });
+        }
         return;
       }
 
@@ -216,7 +254,7 @@ export default function CanvasSurface({
         return;
       }
     },
-    [isPanning, panStart, drawState, resizeState, dragState, viewport, panViewport, optimisticUpdate, optimisticMove, sendPresence],
+    [isPanning, panStart, endpointState, rotateState, drawState, resizeState, dragState, objects, viewport, panViewport, optimisticUpdate, optimisticMove, sendPresence],
   );
 
   // ── Mouse up ──
@@ -228,8 +266,44 @@ export default function CanvasSurface({
         return;
       }
 
+      if (endpointState) {
+        const obj = objects.get(endpointState.objectId);
+        if (obj) onResizeObject(endpointState.objectId, obj.x, obj.y, obj.width, obj.height);
+        setEndpointState(null);
+        return;
+      }
+
+      if (rotateState) {
+        const obj = objects.get(rotateState.objectId);
+        if (obj) onRotateObject(rotateState.objectId, obj.rotation);
+        setRotateState(null);
+        return;
+      }
+
       if (drawState) {
         const { startCanvas, currentCanvas, objectId, objectType } = drawState;
+
+        if (objectType === 'ARROW') {
+          const dx = currentCanvas.x - startCanvas.x;
+          const dy = currentCanvas.y - startCanvas.y;
+          onCreateObject({
+            objectId,
+            type: 'ARROW',
+            x: startCanvas.x,
+            y: startCanvas.y,
+            width: Math.max(Math.hypot(dx, dy), 20),
+            height: 0,
+            rotation: angleBetween(startCanvas, currentCanvas),
+            color: '#ffffff',
+            strokeColor: '#ffffff',
+            strokeWidth: 2,
+            text: null,
+            textColor: null,
+          });
+          setDrawState(null);
+          return;
+        }
+
         const x = Math.min(startCanvas.x, currentCanvas.x);
         const y = Math.min(startCanvas.y, currentCanvas.y);
         const width = Math.max(Math.abs(currentCanvas.x - startCanvas.x), 20);
@@ -240,6 +314,7 @@ export default function CanvasSurface({
             color: '#fff3bf',
             strokeColor: '#f08c00',
             strokeWidth: 1,
+            textColor: '#1e1e1e',
             width: Math.max(width, 150),
             height: Math.max(height, 100),
           },
@@ -247,6 +322,7 @@ export default function CanvasSurface({
             color: 'transparent',
             strokeColor: 'transparent',
             strokeWidth: 0,
+            textColor: '#1e1e1e',
             width: Math.max(width, 120),
             height: Math.max(height, 30),
           },
@@ -266,6 +342,7 @@ export default function CanvasSurface({
           strokeColor: typeDefaults.strokeColor ?? '#1E1E1E',
           strokeWidth: typeDefaults.strokeWidth ?? 2,
           text: null,
+          textColor: typeDefaults.textColor ?? null,
         };
 
         onCreateObject(newObj);
@@ -291,7 +368,7 @@ export default function CanvasSurface({
         return;
       }
     },
-    [isPanning, drawState, resizeState, dragState, objects, onCreateObject, onResizeObject, onMoveObject],
+    [isPanning, endpointState, rotateState, drawState, resizeState, dragState, objects, onCreateObject, onResizeObject, onMoveObject, onRotateObject],
   );
 
   // ── Mouse wheel (zoom) ──
@@ -368,6 +445,34 @@ export default function CanvasSurface({
     [activeTool, objects, viewport, setSelectedObjectId],
   );
 
+  const handleRotateMouseDown = useCallback(
+    (objectId: string, e: ReactMouseEvent) => {
+      if (activeTool !== 'SELECT' || e.button !== 0) return;
+      e.stopPropagation();
+
+      const obj = objects.get(objectId);
+      if (!obj) return;
+
+      setSelectedObjectId(objectId);
+      setRotateState({ objectId });
+    },
+    [activeTool, objects, setSelectedObjectId],
+  );
+
+  const handleEndpointMouseDown = useCallback(
+    (objectId: string, e: ReactMouseEvent) => {
+      if (activeTool !== 'SELECT' || e.button !== 0) return;
+      e.stopPropagation();
+
+      const obj = objects.get(objectId);
+      if (!obj) return;
+
+      setSelectedObjectId(objectId);
+      setEndpointState({ objectId });
+    },
+    [activeTool, objects, setSelectedObjectId],
+  );
+
   // ── Double-click for text editing ──
   const handleObjectDoubleClick = useCallback(
     (objectId: string) => {
@@ -396,15 +501,17 @@ export default function CanvasSurface({
   // ── Cursor class ──
   const cursorClass = isPanning
     ? 'tool-panning'
-    : spaceDown
+    : spaceDown || activeTool === 'GRAB'
       ? 'tool-pan'
-      : activeTool === 'SELECT'
-        ? 'tool-select'
-        : 'tool-draw';
+      : rotateState || endpointState
+        ? 'tool-rotating'
+        : activeTool === 'SELECT'
+          ? 'tool-select'
+          : 'tool-draw';
 
   // ── Render shape ──
   const renderShape = (obj: CanvasObject, isGhost = false) => {
-    const { objectId, type, x, y, width, height, color, strokeColor, strokeWidth, text } = obj;
+    const { objectId, type, x, y, width, height, rotation, color, strokeColor, strokeWidth, text, textColor } = obj;
     const isSelected = objectId === selectedObjectId && !isGhost;
     const isEditing = objectId === editingTextId;
     const className = isGhost ? 'drawing-ghost' : `canvas-object ${isSelected ? 'selected' : ''}`;
@@ -438,7 +545,7 @@ export default function CanvasSurface({
                 className="sticky-note-text"
                 x={x + 10}
                 y={y + 24}
-                fill="#1e1e1e"
+                fill={textColor ?? '#1e1e1e'}
                 style={{ fontSize: 14 }}
               >
                 {text.split('\n').map((line, i) => (
@@ -498,17 +605,21 @@ export default function CanvasSurface({
 
       case 'ARROW':
         shape = (
-          <g {...commonProps} data-object-id={objectId}>
+          <g
+            {...commonProps}
+            data-object-id={objectId}
+            transform={rotation ? `rotate(${rotation} ${x} ${y})` : undefined}
+          >
             <line
               x1={x}
               y1={y}
               x2={x + width}
-              y2={y + height}
+              y2={y}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
             />
             <polygon
-              points={arrowHead(x, y, x + width, y + height, 12)}
+              points={arrowHead(x, y, x + width, y, 12)}
               fill={strokeColor}
             />
           </g>
@@ -532,7 +643,7 @@ export default function CanvasSurface({
                 <text
                   x={x + 4}
                   y={y + 20}
-                  fill="#1e1e1e"
+                  fill={textColor ?? '#1e1e1e'}
                   style={{ fontSize: 16, fontFamily: 'Inter, system-ui, sans-serif' }}
                 >
                   {text}
@@ -577,19 +688,44 @@ export default function CanvasSurface({
 
   // Drawing ghost preview
   const ghostObj: CanvasObject | null = drawState
-    ? {
-        objectId: drawState.objectId,
-        type: drawState.objectType,
-        x: Math.min(drawState.startCanvas.x, drawState.currentCanvas.x),
-        y: Math.min(drawState.startCanvas.y, drawState.currentCanvas.y),
-        width: Math.abs(drawState.currentCanvas.x - drawState.startCanvas.x),
-        height: Math.abs(drawState.currentCanvas.y - drawState.startCanvas.y),
-        rotation: 0,
-        color: '#ffffff',
-        strokeColor: '#4263eb',
-        strokeWidth: 2,
-        text: null,
-      }
+    ? ((): CanvasObject => {
+        const { objectId, objectType, startCanvas, currentCanvas } = drawState;
+
+        if (objectType === 'ARROW') {
+          return {
+            objectId,
+            type: 'ARROW',
+            x: startCanvas.x,
+            y: startCanvas.y,
+            width: Math.max(
+              Math.hypot(currentCanvas.x - startCanvas.x, currentCanvas.y - startCanvas.y),
+              1,
+            ),
+            height: 0,
+            rotation: angleBetween(startCanvas, currentCanvas),
+            color: '#ffffff',
+            strokeColor: '#4263eb',
+            strokeWidth: 2,
+            text: null,
+            textColor: null,
+          };
+        }
+
+        return {
+          objectId,
+          type: objectType,
+          x: Math.min(startCanvas.x, currentCanvas.x),
+          y: Math.min(startCanvas.y, currentCanvas.y),
+          width: Math.abs(currentCanvas.x - startCanvas.x),
+          height: Math.abs(currentCanvas.y - startCanvas.y),
+          rotation: 0,
+          color: '#ffffff',
+          strokeColor: '#4263eb',
+          strokeWidth: 2,
+          text: null,
+          textColor: null,
+        };
+      })()
     : null;
 
   // Selected object for handles
@@ -639,38 +775,80 @@ export default function CanvasSurface({
 
           {/* Selection outline + handles */}
           {selectedObj && !dragState && !resizeState && (
-            <g>
-              <rect
-                className="selection-outline"
-                x={selectedObj.x - 2}
-                y={selectedObj.y - 2}
-                width={selectedObj.width + 4}
-                height={selectedObj.height + 4}
-                rx={selectedObj.type === 'STICKY_NOTE' ? 10 : 0}
-              />
-              {/* Corner handles */}
-              {[
-                [selectedObj.x - 4, selectedObj.y - 4],
-                [selectedObj.x + selectedObj.width, selectedObj.y - 4],
-                [selectedObj.x - 4, selectedObj.y + selectedObj.height],
-                [selectedObj.x + selectedObj.width, selectedObj.y + selectedObj.height],
-              ].map(([hx, hy], i) => (
+            selectedObj.type === 'ARROW' ? (
+              <g
+                transform={
+                  selectedObj.rotation
+                    ? `rotate(${selectedObj.rotation} ${selectedObj.x} ${selectedObj.y})`
+                    : undefined
+                }
+              >
                 <rect
-                  key={i}
-                  className={`resize-handle resize-handle-${(['nw', 'ne', 'sw', 'se'] as ResizeHandle[])[i]}`}
-                  onMouseDown={(e) => handleResizeMouseDown(
-                    selectedObj.objectId,
-                    (['nw', 'ne', 'sw', 'se'] as ResizeHandle[])[i],
-                    e,
-                  )}
-                  x={hx}
-                  y={hy}
+                  className="selection-outline"
+                  x={selectedObj.x - 2}
+                  y={selectedObj.y - 3}
+                  width={selectedObj.width + 4}
+                  height={6}
+                />
+                {/* Tip handle: drag to change length (and direction) */}
+                <rect
+                  className="endpoint-handle"
+                  x={selectedObj.x + selectedObj.width - 4}
+                  y={selectedObj.y - 4}
                   width={8}
                   height={8}
                   rx={2}
+                  onMouseDown={(e) => handleEndpointMouseDown(selectedObj.objectId, e)}
                 />
-              ))}
-            </g>
+                <line
+                  className="rotate-handle-stem"
+                  x1={selectedObj.x + selectedObj.width}
+                  y1={selectedObj.y}
+                  x2={selectedObj.x + selectedObj.width + 16}
+                  y2={selectedObj.y}
+                />
+                <circle
+                  className="rotate-handle"
+                  cx={selectedObj.x + selectedObj.width + 16}
+                  cy={selectedObj.y}
+                  r={6}
+                  onMouseDown={(e) => handleRotateMouseDown(selectedObj.objectId, e)}
+                />
+              </g>
+            ) : (
+              <g>
+                <rect
+                  className="selection-outline"
+                  x={selectedObj.x - 2}
+                  y={selectedObj.y - 2}
+                  width={selectedObj.width + 4}
+                  height={selectedObj.height + 4}
+                  rx={selectedObj.type === 'STICKY_NOTE' ? 10 : 0}
+                />
+                {/* Corner handles */}
+                {[
+                  [selectedObj.x - 4, selectedObj.y - 4],
+                  [selectedObj.x + selectedObj.width, selectedObj.y - 4],
+                  [selectedObj.x - 4, selectedObj.y + selectedObj.height],
+                  [selectedObj.x + selectedObj.width, selectedObj.y + selectedObj.height],
+                ].map(([hx, hy], i) => (
+                  <rect
+                    key={i}
+                    className={`resize-handle resize-handle-${(['nw', 'ne', 'sw', 'se'] as ResizeHandle[])[i]}`}
+                    onMouseDown={(e) => handleResizeMouseDown(
+                      selectedObj.objectId,
+                      (['nw', 'ne', 'sw', 'se'] as ResizeHandle[])[i],
+                      e,
+                    )}
+                    x={hx}
+                    y={hy}
+                    width={8}
+                    height={8}
+                    rx={2}
+                  />
+                ))}
+              </g>
+            )
           )}
 
           {/* Remote edit highlights */}

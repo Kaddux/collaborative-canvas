@@ -36,7 +36,8 @@ export class CanvasWebSocketClient {
   }
 
   createConnection(): void {
-    const url = `ws://${window.location.host}/ws/canvas/${this.canvasId}?clientId=${this.clientId}`;
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${scheme}://${window.location.host}/ws/canvas/${this.canvasId}?clientId=${this.clientId}`;
 
     this.ws = new WebSocket(url);
 

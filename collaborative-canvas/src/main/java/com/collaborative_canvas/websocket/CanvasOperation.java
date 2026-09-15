@@ -19,6 +19,7 @@ public class CanvasOperation {
     private String strokeColor;
     private double strokeWidth;
     private String text;
+    private String textColor;
     private String operationId;
     private long sequence;
 

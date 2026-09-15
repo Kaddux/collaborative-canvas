@@ -1,5 +1,6 @@
 package com.collaborative_canvas.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -35,7 +36,12 @@ public class CanvasObjectEntity {
 
     private double strokeWidth;
 
+    // Unbounded text: the previous varchar(255) silently failed on longer text, which
+    // dropped the operation and closed the connection with 1011.
+    @Column(columnDefinition = "text")
     private String text;
+
+    private String textColor;
 
     protected CanvasObjectEntity() {
     }
@@ -47,7 +53,7 @@ public class CanvasObjectEntity {
             double y) {
 
         this(objectId, canvasId, "RECTANGLE", x, y, 200, 100, 0,
-                "#ffffff", "#1E1E1E", 2, null);
+                "#ffffff", "#1E1E1E", 2, null, null);
     }
 
     public CanvasObjectEntity(
@@ -64,6 +70,25 @@ public class CanvasObjectEntity {
             double strokeWidth,
             String text) {
 
+        this(objectId, canvasId, type, x, y, width, height, rotation,
+                color, strokeColor, strokeWidth, text, null);
+    }
+
+    public CanvasObjectEntity(
+            String objectId,
+            String canvasId,
+            String type,
+            double x,
+            double y,
+            double width,
+            double height,
+            double rotation,
+            String color,
+            String strokeColor,
+            double strokeWidth,
+            String text,
+            String textColor) {
+
         this.objectId = objectId;
         this.canvasId = canvasId;
         this.type = type;
@@ -76,5 +101,6 @@ public class CanvasObjectEntity {
         this.strokeColor = strokeColor;
         this.strokeWidth = strokeWidth;
         this.text = text;
+        this.textColor = textColor;
     }
 }

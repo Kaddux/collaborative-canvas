@@ -100,7 +100,7 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
 
         syncMessage.setMetadata(metadata);
 
-        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(syncMessage)));
+        sendMessage(session, new TextMessage(objectMapper.writeValueAsString(syncMessage)));
 
         sendHistoryState(session, canvasId, clientId);
 
@@ -188,7 +188,21 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            CanvasService.OperationResult result = applyOperation(canvasId, operation);
+            CanvasService.OperationResult result;
+            try {
+                result = applyOperation(canvasId, operation);
+            } catch (Exception exception) {
+                // Never let a failed apply kill the socket: report it and keep the client
+                // connected so state can resync.
+                log.error(
+                        "Failed to apply {} operation on canvas {}",
+                        operation.getType(),
+                        canvasId,
+                        exception
+                );
+                sendError(session, "Failed to apply operation");
+                return;
+            }
 
             if (!result.success()) {
                 sendError(session, result.error());
@@ -252,8 +266,7 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
         message.setClientId(clientId);
         message.setMetadata(metadata);
 
-        session.sendMessage(
-                new TextMessage(objectMapper.writeValueAsString(message)));
+        sendMessage(session, new TextMessage(objectMapper.writeValueAsString(message)));
     }
     @Override
     public void afterConnectionClosed(
@@ -318,7 +331,8 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                         operation.getColor(),
                         operation.getStrokeColor(),
                         operation.getStrokeWidth(),
-                        operation.getText()
+                        operation.getText(),
+                        operation.getTextColor()
                 );
             }
             case "MOVE_OBJECT" -> {
@@ -373,12 +387,7 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 objectMapper.writeValueAsString(message);
 
         for (WebSocketSession client : clients) {
-            if (client.isOpen()) {
-
-                client.sendMessage(
-                        new TextMessage(json)
-                );
-            }
+            sendMessage(client, new TextMessage(json));
         }
     }
     private String extractClientId(WebSocketSession session) {
@@ -437,13 +446,8 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 objectMapper.writeValueAsString(message);
 
         for (WebSocketSession client : clients) {
-
-            if (client.isOpen() &&
-                    !client.getId().equals(joiningSession.getId())) {
-
-                client.sendMessage(
-                        new TextMessage(json)
-                );
+            if (!client.getId().equals(joiningSession.getId())) {
+                sendMessage(client, new TextMessage(json));
             }
         }
     }
@@ -467,11 +471,7 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
                 objectMapper.writeValueAsString(message);
 
         for (WebSocketSession client : clients) {
-            if (client.isOpen()) {
-                client.sendMessage(
-                        new TextMessage(json)
-                );
-            }
+            sendMessage(client, new TextMessage(json));
         }
     }
     private void sendError(
@@ -487,8 +487,24 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
         );
         errorMessage.setPayload(message);
 
-        session.sendMessage(
-                new TextMessage(objectMapper.writeValueAsString(errorMessage)));
+        sendMessage(session, new TextMessage(objectMapper.writeValueAsString(errorMessage)));
+    }
+
+    /**
+     * Sends a message on a session, serialized per session. A {@link WebSocketSession} is not
+     * safe for concurrent sends; two threads writing at once makes Tomcat throw
+     * "The remote endpoint was in state [TEXT_PARTIAL_WRITING]", which drops the message for
+     * that client and leaves clients with divergent state.
+     */
+    private void sendMessage(WebSocketSession session, TextMessage message) throws IOException {
+        if (!session.isOpen()) {
+            return;
+        }
+        synchronized (session) {
+            if (session.isOpen()) {
+                session.sendMessage(message);
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -522,8 +538,8 @@ public class CanvasWebSocketHandler extends TextWebSocketHandler {
         String json = objectMapper.writeValueAsString(outbound);
 
         for (WebSocketSession client : clients) {
-            if (client.isOpen() && !client.getId().equals(sender.getId())) {
-                client.sendMessage(new TextMessage(json));
+            if (!client.getId().equals(sender.getId())) {
+                sendMessage(client, new TextMessage(json));
             }
         }
     }

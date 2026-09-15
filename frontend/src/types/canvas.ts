@@ -21,11 +21,13 @@ export interface CanvasObject {
   strokeColor: string;
   strokeWidth: number;
   text: string | null;
+  textColor: string | null;
 }
 
 // ── Tool union ──────────────────────────────────────────────────────
 export type Tool =
   | 'SELECT'
+  | 'GRAB'
   | CanvasObjectType;
 
 // ── Geometry helpers ────────────────────────────────────────────────
@@ -62,6 +64,7 @@ export interface OutboundOperation {
   strokeColor?: string;
   strokeWidth?: number;
   text?: string | null;
+  textColor?: string | null;
 }
 
 export interface OutboundPresence {
@@ -98,6 +101,7 @@ export interface InboundOperation {
     strokeColor?: string;
     strokeWidth?: number;
     text?: string | null;
+    textColor?: string | null;
   };
 }
 

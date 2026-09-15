@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCanvasStore } from './store/canvasStore';
 import { CanvasWebSocketClient } from './ws/websocketClient';
 import { generateClientId } from './utils/idgen';
+import { clearCanvasFromUrl, getCanvasIdFromUrl, setCanvasInUrl } from './utils/shareLink';
 import type {
   CanvasMetadata,
   CanvasObject,
@@ -17,6 +18,10 @@ type AppState = 'entry' | 'canvas';
 
 export default function App() {
   const [appState, setAppState] = useState<AppState>('entry');
+  const [linkCanvasId] = useState(() => getCanvasIdFromUrl());
+  const [resolvingLink, setResolvingLink] = useState(linkCanvasId !== null);
+  const [pendingJoinId, setPendingJoinId] = useState<string | null>(linkCanvasId);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const wsRef = useRef<CanvasWebSocketClient | null>(null);
 
   const store = useCanvasStore;
@@ -26,8 +31,43 @@ export default function App() {
   const handleJoinCanvas = useCallback((meta: CanvasMetadata) => {
     const s = store.getState();
     s.setConnection(meta.canvasId, meta.name, clientId.current);
+    setCanvasInUrl(meta.canvasId);
+    setLinkError(null);
+    setPendingJoinId(null);
     setAppState('canvas');
   }, [store]);
+
+  // ── Auto-join from a share link (?canvas=<id>) ──
+  useEffect(() => {
+    if (!linkCanvasId) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/canvases/${encodeURIComponent(linkCanvasId)}`);
+        if (res.status === 404) {
+          clearCanvasFromUrl();
+          if (!cancelled) setLinkError('Canvas not found. Check the link and try again.');
+          return;
+        }
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+        const meta: CanvasMetadata = await res.json();
+        if (!cancelled) handleJoinCanvas(meta);
+      } catch (err) {
+        clearCanvasFromUrl();
+        if (!cancelled) {
+          setLinkError(err instanceof Error ? err.message : 'Failed to open shared canvas');
+        }
+      } finally {
+        if (!cancelled) setResolvingLink(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [linkCanvasId, handleJoinCanvas]);
 
   // ── WebSocket lifecycle ──
   useEffect(() => {
@@ -69,6 +109,7 @@ export default function App() {
                       strokeColor: op.strokeColor,
                       strokeWidth: op.strokeWidth,
                       text: op.text,
+                      textColor: op.textColor,
                     },
                     op.sequence,
                   );
@@ -92,6 +133,7 @@ export default function App() {
                       strokeColor: op.strokeColor,
                       strokeWidth: op.strokeWidth,
                       text: op.text,
+                      textColor: op.textColor,
                     },
                     op.sequence,
                   );
@@ -130,6 +172,7 @@ export default function App() {
         },
         onCanvasNotFound: () => {
           alert('Canvas not found. Returning to home.');
+          clearCanvasFromUrl();
           store.getState().reset();
           setAppState('entry');
         },
@@ -168,6 +211,7 @@ export default function App() {
       strokeColor: obj.strokeColor,
       strokeWidth: obj.strokeWidth,
       text: obj.text,
+      textColor: obj.textColor,
     });
   }, [store]);
 
@@ -198,6 +242,29 @@ export default function App() {
       strokeColor: obj.strokeColor,
       strokeWidth: obj.strokeWidth,
       text: obj.text,
+      textColor: obj.textColor,
+    });
+  }, [store]);
+
+  const handleRotateObject = useCallback((objectId: string, rotation: number) => {
+    const obj = store.getState().objects.get(objectId);
+    if (!obj) return;
+    // Rotation is applied optimistically during the drag; send a full snapshot so the
+    // server (which overwrites every field) preserves the rest of the object.
+    wsRef.current?.send({
+      type: 'UPDATE_OBJECT',
+      objectId,
+      objectType: obj.type,
+      x: obj.x,
+      y: obj.y,
+      width: obj.width,
+      height: obj.height,
+      rotation,
+      color: obj.color,
+      strokeColor: obj.strokeColor,
+      strokeWidth: obj.strokeWidth,
+      text: obj.text,
+      textColor: obj.textColor,
     });
   }, [store]);
 
@@ -229,7 +296,7 @@ export default function App() {
   }, []);
 
   const handleUpdateStyle = useCallback(
-    (objectId: string, fields: Partial<Pick<CanvasObject, 'color' | 'strokeColor' | 'strokeWidth'>>) => {
+    (objectId: string, fields: Partial<Pick<CanvasObject, 'color' | 'strokeColor' | 'strokeWidth' | 'textColor'>>) => {
       const s = store.getState();
       const obj = s.objects.get(objectId);
       if (!obj) return;
@@ -248,9 +315,10 @@ export default function App() {
         rotation: merged.rotation,
         color: merged.color,
         strokeColor: merged.strokeColor,
-        strokeWidth: merged.strokeWidth,
-        text: merged.text,
-      });
+      strokeWidth: merged.strokeWidth,
+      text: merged.text,
+      textColor: merged.textColor,
+    });
     },
     [store],
   );
@@ -275,16 +343,24 @@ export default function App() {
         rotation: merged.rotation,
         color: merged.color,
         strokeColor: merged.strokeColor,
-        strokeWidth: merged.strokeWidth,
-        text: merged.text,
-      });
+      strokeWidth: merged.strokeWidth,
+      text: merged.text,
+      textColor: merged.textColor,
+    });
     },
     [store],
   );
 
   // ── Render ──
   if (appState === 'entry') {
-    return <CanvasEntryScreen onJoinCanvas={handleJoinCanvas} />;
+    return (
+      <CanvasEntryScreen
+        onJoinCanvas={handleJoinCanvas}
+        initialJoinId={pendingJoinId ?? undefined}
+        initialError={linkError ?? undefined}
+        resolving={resolvingLink}
+      />
+    );
   }
 
   return (
@@ -293,6 +369,7 @@ export default function App() {
         onCreateObject={handleCreateObject}
         onMoveObject={handleMoveObject}
         onResizeObject={handleResizeObject}
+        onRotateObject={handleRotateObject}
         onUpdateText={handleUpdateText}
         onPresenceUpdate={handlePresenceUpdate}
       />

@@ -1,7 +1,5 @@
 .style-panel {
   position: fixed;
-  top: 80px;
-  right: -280px;
   width: 260px;
   z-index: 90;
   background: var(--surface-raised);
@@ -10,12 +8,17 @@
   border-radius: 16px;
   padding: 20px;
   box-shadow: 0 8px 32px var(--shadow);
-  transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   font-family: 'Inter', system-ui, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(12px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .style-panel.open {
-  right: 16px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
 }
 
 .style-panel h3 {
@@ -89,10 +92,24 @@
 .style-panel-object-type {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--surface-border-subtle);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.style-panel-object-type:active {
+  cursor: grabbing;
+}
+
+.style-panel-grip {
+  flex-shrink: 0;
+  color: var(--ink-disabled);
+  fill: currentColor;
 }
 
 .style-panel-object-type .type-icon {

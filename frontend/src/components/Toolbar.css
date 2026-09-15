@@ -121,6 +121,28 @@
   pointer-events: none;
 }
 
+.toolbar-share-status {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-raised);
+  border: 1px solid var(--surface-border);
+  color: var(--ink-bright);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.toolbar-share-status:not(:empty) {
+  opacity: 1;
+}
+
 .connection-indicator {
   width: 8px;
   height: 8px;

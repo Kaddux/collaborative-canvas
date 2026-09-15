@@ -38,7 +38,7 @@ public class CanvasService {
             double y) {
 
                 return createObject(canvasId, objectId, "RECTANGLE", x, y,
-                                200, 100, 0, "#ffffff", "#1E1E1E", 2, null);
+                                200, 100, 0, "#ffffff", "#1E1E1E", 2, null, null);
         }
 
         @Transactional
@@ -55,6 +55,26 @@ public class CanvasService {
                         String strokeColor,
                         double strokeWidth,
                         String text) {
+
+                return createObject(canvasId, objectId, type, x, y, width, height,
+                        rotation, color, strokeColor, strokeWidth, text, null);
+        }
+
+        @Transactional
+        public OperationResult createObject(
+                        String canvasId,
+                        String objectId,
+                        String type,
+                        double x,
+                        double y,
+                        double width,
+                        double height,
+                        double rotation,
+                        String color,
+                        String strokeColor,
+                        double strokeWidth,
+                        String text,
+                        String textColor) {
 
                 if (objectId == null || objectId.isBlank()) {
                         return OperationResult.failure("Object ID is required");
@@ -93,6 +113,7 @@ public class CanvasService {
         object.setStrokeColor(strokeColor);
         object.setStrokeWidth(strokeWidth);
         object.setText(text);
+        object.setTextColor(textColor);
 
         CanvasObject existing =
                 objects.putIfAbsent(objectId, object);
@@ -101,22 +122,29 @@ public class CanvasService {
             return OperationResult.failure("Object already exists");
         }
 
-        canvasRepository.save(
-                new CanvasObjectEntity(
-                        objectId,
-                        canvasId,
-                        type,
-                        x,
-                        y,
-                        width,
-                        height,
-                        rotation,
-                        color,
-                        strokeColor,
-                        strokeWidth,
-                        text
-                )
-        );
+        try {
+            canvasRepository.save(
+                    new CanvasObjectEntity(
+                            objectId,
+                            canvasId,
+                            type,
+                            x,
+                            y,
+                            width,
+                            height,
+                            rotation,
+                            color,
+                            strokeColor,
+                            strokeWidth,
+                            text,
+                            textColor
+                    )
+            );
+        } catch (RuntimeException exception) {
+            // Keep the in-memory cache consistent with the rolled-back DB write.
+            objects.remove(objectId, object);
+            throw exception;
+        }
 
         return OperationResult.applied(null, object.copy());
     }
@@ -174,7 +202,12 @@ public class CanvasService {
             entity.setX(x);
             entity.setY(y);
 
-            canvasRepository.save(entity);
+            try {
+                canvasRepository.save(entity);
+            } catch (RuntimeException exception) {
+                restore(object, before);
+                throw exception;
+            }
         }
 
         return OperationResult.applied(before, object.copy());
@@ -223,32 +256,40 @@ public class CanvasService {
 
         CanvasObject before = object.copy();
 
-        synchronized (object) {
-            // The object type is identity, not a mutable style field: UPDATE_OBJECT never
-            // changes it. (The operation type is not the object type.)
-            object.setX(op.getX());
-            object.setY(op.getY());
-            object.setWidth(width);
-            object.setHeight(height);
-            object.setRotation(op.getRotation());
-            object.setColor(op.getColor());
-            object.setStrokeColor(op.getStrokeColor());
-            object.setStrokeWidth(strokeWidth);
-            object.setText(op.getText());
-        }
+        try {
+            synchronized (object) {
+                // The object type is identity, not a mutable style field: UPDATE_OBJECT never
+                // changes it. (The operation type is not the object type.)
+                object.setX(op.getX());
+                object.setY(op.getY());
+                object.setWidth(width);
+                object.setHeight(height);
+                object.setRotation(op.getRotation());
+                object.setColor(op.getColor());
+                object.setStrokeColor(op.getStrokeColor());
+                object.setStrokeWidth(strokeWidth);
+                object.setText(op.getText());
+                object.setTextColor(op.getTextColor());
+            }
 
-        canvasRepository.findById(op.getObjectId()).ifPresent(entity -> {
-            entity.setX(op.getX());
-            entity.setY(op.getY());
-            entity.setWidth(width);
-            entity.setHeight(height);
-            entity.setRotation(op.getRotation());
-            entity.setColor(op.getColor());
-            entity.setStrokeColor(op.getStrokeColor());
-            entity.setStrokeWidth(strokeWidth);
-            entity.setText(op.getText());
-            canvasRepository.save(entity);
-        });
+            canvasRepository.findById(op.getObjectId()).ifPresent(entity -> {
+                entity.setX(op.getX());
+                entity.setY(op.getY());
+                entity.setWidth(width);
+                entity.setHeight(height);
+                entity.setRotation(op.getRotation());
+                entity.setColor(op.getColor());
+                entity.setStrokeColor(op.getStrokeColor());
+                entity.setStrokeWidth(strokeWidth);
+                entity.setText(op.getText());
+                entity.setTextColor(op.getTextColor());
+                canvasRepository.save(entity);
+            });
+        } catch (RuntimeException exception) {
+            // Keep the in-memory cache consistent with the rolled-back DB write.
+            restore(object, before);
+            throw exception;
+        }
 
         return OperationResult.applied(before, object.copy());
     }
@@ -280,6 +321,7 @@ public class CanvasService {
                 object.setStrokeColor(entity.getStrokeColor());
                 object.setStrokeWidth(entity.getStrokeWidth());
                 object.setText(entity.getText());
+                object.setTextColor(entity.getTextColor());
 
                 objects.put(
                         entity.getObjectId(),
@@ -337,6 +379,21 @@ public class CanvasService {
         return canvasMetadataRepository.existsById(canvasId);
     }
 
+    /** Restores an in-memory object to a prior snapshot after a failed persistence write. */
+    private static void restore(CanvasObject target, CanvasObject source) {
+        synchronized (target) {
+            target.setX(source.getX());
+            target.setY(source.getY());
+            target.setWidth(source.getWidth());
+            target.setHeight(source.getHeight());
+            target.setRotation(source.getRotation());
+            target.setColor(source.getColor());
+            target.setStrokeColor(source.getStrokeColor());
+            target.setStrokeWidth(source.getStrokeWidth());
+            target.setText(source.getText());
+            target.setTextColor(source.getTextColor());
+        }
+    }
 
     public record OperationResult(
             boolean success,

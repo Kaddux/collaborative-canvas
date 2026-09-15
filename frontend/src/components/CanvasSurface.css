@@ -22,6 +22,10 @@
   cursor: grabbing;
 }
 
+.canvas-container.tool-rotating {
+  cursor: grabbing;
+}
+
 .canvas-svg {
   width: 100%;
   height: 100%;
@@ -81,6 +85,46 @@
 
 .resize-handle:hover {
   transform: scale(1.3);
+}
+
+/* Rotate handle (arrows) */
+.rotate-handle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  cursor: grab;
+  transition: transform 0.1s;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.rotate-handle:hover {
+  transform: scale(1.25);
+}
+
+.rotate-handle:active {
+  cursor: grabbing;
+}
+
+.rotate-handle-stem {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+/* Tip handle (arrows): drag to change length/direction */
+.endpoint-handle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  cursor: crosshair;
+  transition: transform 0.1s;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.endpoint-handle:hover {
+  transform: scale(1.25);
 }
 
 /* Drawing preview ghost */

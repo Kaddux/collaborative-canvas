@@ -4,13 +4,24 @@ import './CanvasEntryScreen.css';
 
 interface Props {
   onJoinCanvas: (meta: CanvasMetadata) => void;
+  initialJoinId?: string;
+  initialError?: string;
+  resolving?: boolean;
 }
 
-export default function CanvasEntryScreen({ onJoinCanvas }: Props) {
+export default function CanvasEntryScreen({
+  onJoinCanvas,
+  initialJoinId,
+  initialError,
+  resolving = false,
+}: Props) {
   const [createName, setCreateName] = useState('');
-  const [joinId, setJoinId] = useState('');
+  const [joinId, setJoinId] = useState(initialJoinId ?? '');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Local errors (failed create/join) take precedence over one handed in by a failed share link.
+  const shownError = error ?? initialError ?? null;
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -52,6 +63,18 @@ export default function CanvasEntryScreen({ onJoinCanvas }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (resolving) {
+    return (
+      <div className="entry-screen">
+        <div className="entry-card">
+          <h1>Collaborative Canvas</h1>
+          <p className="subtitle">Joining shared canvas…</p>
+          <span className="entry-loading" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -112,7 +135,7 @@ export default function CanvasEntryScreen({ onJoinCanvas }: Props) {
           </form>
         </div>
 
-        {error && <div className="entry-error">{error}</div>}
+        {shownError && <div className="entry-error">{shownError}</div>}
       </div>
     </div>
   );

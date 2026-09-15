@@ -155,5 +155,6 @@ public class CanvasHistory {
         operation.setStrokeColor(object.getStrokeColor());
         operation.setStrokeWidth(object.getStrokeWidth());
         operation.setText(object.getText());
+        operation.setTextColor(object.getTextColor());
     }
 }
