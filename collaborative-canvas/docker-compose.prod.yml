@@ -1,0 +1,74 @@
+# Production override for the single-VM deployment.
+#
+# Usage (run from this directory):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Notes:
+#   - Requires Docker Compose >= 2.24 for the `!reset` merge tag.
+#   - Secrets live in .env (gitignored); see .env.example.
+#   - Postgres/Kafka are NOT published to the host: they are only reachable from
+#     other containers on the compose network, by service name.
+#   - Kafka advertises its compose service name so the backend container can reach it.
+services:
+  postgres:
+    ports: !reset []
+
+  kafka:
+    ports: !reset []
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: collaborative-canvas-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/collaborative_canvas?options=-c%20TimeZone%3DUTC
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      WEBSOCKET_ALLOWED_ORIGINS: ${WEBSOCKET_ALLOWED_ORIGINS:?WEBSOCKET_ALLOWED_ORIGINS must be set}
+      SPRING_JPA_SHOW_SQL: "false"
+    expose:
+      - "8080"
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: collaborative-canvas-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+
+  certbot:
+    image: certbot/certbot
+    container_name: collaborative-canvas-certbot
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    # Keep certificates fresh; the web container reloads separately (or via a
+    # deploy hook if you add one).
+    entrypoint: >
+      sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+
+volumes:
+  letsencrypt:
+  certbot-webroot:
