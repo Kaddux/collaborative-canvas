@@ -137,14 +137,22 @@ dig +short syncboard.me    # must print only <VM_PUBLIC_IP>
 ```bash
 set -a; . ./.env; set +a   # loads $DOMAIN and $LETSENCRYPT_EMAIL
 
-# The certbot service's entrypoint is the renewal loop, so override it for this one-off
-# issuance (otherwise the loop runs and `certonly` is ignored).
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
+# 1) The `web` container bootstrapped a temporary self-signed cert into certbot's live
+#    directory; remove that lineage so certbot can create its own.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm -T --entrypoint sh certbot -c \
+  "rm -rf /etc/letsencrypt/live/$DOMAIN /etc/letsencrypt/archive/$DOMAIN /etc/letsencrypt/renewal/$DOMAIN.conf"
+
+# 2) Override the renewal-loop entrypoint for this one-off issuance.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm -T \
   --entrypoint certbot certbot certonly --webroot -w /var/www/certbot \
   -d "$DOMAIN" --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
 
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web nginx -s reload
+# 3) Reload nginx to pick up the real certificate.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T web nginx -s reload
 ```
+
+> If you drive these commands from a script piped over stdin, add `< /dev/null` to the
+> `docker compose run` calls — otherwise they consume the remaining input.
 
 The `certbot` service renews every 12h. After a renewal, reload nginx:
 
