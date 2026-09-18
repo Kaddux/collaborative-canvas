@@ -14,9 +14,11 @@ other's changes live.
 A 23-second walkthrough of the whiteboard in action — join a canvas, draw, watch a peer's edit
 land live, and share the link:
 
-<video src="docs/demo/collaborative-canvas-brag.mp4" poster="docs/demo/collaborative-canvas-brag.jpg" controls muted loop width="100%"></video>
+<a href="docs/demo/collaborative-canvas-brag.mp4">
+  <img src="docs/demo/collaborative-canvas-brag.gif" alt="Collaborative Canvas demo (animated preview)" width="100%">
+</a>
 
-[Open the demo video (MP4)](docs/demo/collaborative-canvas-brag.mp4)
+▶︎ **[Watch the full demo with audio (MP4)](docs/demo/collaborative-canvas-brag.mp4)**
 
 ## Screenshots
 
